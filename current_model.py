@@ -67,22 +67,21 @@ class Map:
         return True    
 
     def get_velocity(self,x:float, y:float):
-        # find the closest vortex
-        d, idx = self.core_centers.query(np.array([x,y]))
-        v_base_radial = np.matrix([[self.cores[idx].x-x],[self.cores[idx].y-y]])
-        v_base_radial /= d
+        # sort the vortices according to their distance to the query point
+        d, idx = self.core_centers.query(np.array([x,y]),k=len(self.cores))
 
+        v_radial_set = []
         v_velocity = np.zeros((2,1))
-        for i,core in enumerate(self.cores): 
+        for i in list(idx): 
+            core = self.cores[i]
             v_radial = np.matrix([[core.x-x],[core.y-y]])
 
-            if i != idx:
-                # if the vortex is in the outter area of the closest vortex, 
-                # exclude it from velocity computation 
-                project = np.transpose(v_radial)*v_base_radial
-                if project[0,0] > d:
+            for v in v_radial_set:
+                project = np.transpose(v) * v_radial
+                if project[0,0] > 0:
                     continue
-
+            
+            v_radial_set.append(v_radial)
             dis = np.linalg.norm(v_radial)
             v_radial /= dis
             if core.clockwise:
