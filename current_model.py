@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 
 class Core:
 
-    def __init__(self, x:float, y:float, clockwise:bool, w:float):
+    def __init__(self, x:float, y:float, clockwise:bool, Gamma:float):
 
         self.x = x  # x coordinate of the vortex core  
         self.y = y  # y coordinate of the vortex core
         self.clockwise = clockwise # if the vortex direction is clockwise
-        self.w = w  # angular velocity of the vortex core
+        self.Gamma = Gamma  # circulation strength of the vortex core
 
 class Map:
 
@@ -19,8 +19,15 @@ class Map:
         self.width = 100 # x coordinate dimension of the map
         self.height = 100 # y coordinate dimension of the map
         self.r = 0.5  # radius of vortex core
-        self.k = 1  # velocity decay rate
-        self.cores = cores # vertex cores 
+        self.v_rel_max = 0.5 # max allowable speed when two currents flowing towards each other
+        self.p = 0.8 # max allowable relative speed at another vortex core
+        self.cores = [] # vertex cores 
+
+        for i,core in enumerate(cores):
+            if self.check_core(core):
+                self.cores.append(core)
+            else:
+                raise RuntimeError("core "+str(i)+" is not viable")
 
         centers = None
         for core in self.cores:
@@ -33,29 +40,66 @@ class Map:
         # KDTree storing vortex core center positions
         self.core_centers = scipy.spatial.KDTree(centers)
 
+    def check_core(self,core_j):
+
+        for core_i in self.cores:
+            dx = core_i.x - core_j.x
+            dy = core_i.y - core_j.y
+            dis = np.sqrt(dx*dx+dy*dy)
+
+            if core_i.clockwise == core_j.clockwise:
+                # i and j rotate in the same direction, their currents run towards each other at boundary
+                # The currents speed at boundary need to be lower than threshold  
+                boundary_i = core_i.Gamma / (2*np.pi*self.v_rel_max)
+                boundary_j = core_j.Gamma / (2*np.pi*self.v_rel_max)
+                if dis < boundary_i + boundary_j:
+                    return False
+            else:
+                # i and j rotate in the opposite direction, their currents join at boundary
+                # The relative current speed of the stronger vortex at boundary need to be lower than threshold 
+                Gamma_l = max(core_i.Gamma, core_j.Gamma)
+                Gamma_s = min(core_i.Gamma, core_j.Gamma)
+                v_1 = Gamma_l / (2*np.pi*(dis-2*self.r))
+                v_2 = Gamma_s / (2*np.pi*self.r)
+                if v_1 > self.p * v_2:
+                    return False
+
+        return True    
+
     def get_velocity(self,x:float, y:float):
-        nn = 1
-        dis, idx = self.core_centers.query(np.array([[x,y]]),k=nn)
+        # find the closest vortex
+        d, idx = self.core_centers.query(np.array([x,y]))
+        v_base_radial = np.matrix([[self.cores[idx].x-x],[self.cores[idx].y-y]])
+        v_base_radial /= d
+
         v_velocity = np.zeros((2,1))
-        for i in range(nn):
-            core = self.cores[idx[i]]
+        for i,core in enumerate(self.cores): 
             v_radial = np.matrix([[core.x-x],[core.y-y]])
-            v_radial /= np.linalg.norm(v_radial)
+
+            if i != idx:
+                # if the vortex is in the outter area of the closest vortex, 
+                # exclude it from velocity computation 
+                project = np.transpose(v_radial)*v_base_radial
+                if project[0,0] > d:
+                    continue
+
+            dis = np.linalg.norm(v_radial)
+            v_radial /= dis
             if core.clockwise:
                 rotation = np.matrix([[0., -1.],[1., 0]])
             else:
                 rotation = np.matrix([[0., 1.],[-1., 0]])
             v_tangent = rotation * v_radial
-            speed = self.compute_speed(core.w,dis[i])
+            speed = self.compute_speed(core.Gamma,dis)
             v_velocity += v_tangent * speed
         
         return v_velocity
 
-    def compute_speed(self, w:float, d:float):
+    def compute_speed(self, Gamma:float, d:float):
         if d <= self.r:
-            return w * d
+            return Gamma / (2*np.pi*self.r*self.r) * d
         else:
-            return w * self.r - self.k / self.r + self.k / d            
+            return Gamma / (2*np.pi*d)          
 
     def visualization(self):
         x_pos = list(np.linspace(0,self.width,100))
