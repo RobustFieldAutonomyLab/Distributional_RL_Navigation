@@ -1,5 +1,6 @@
 import numpy as np
 import scipy
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 class Core:
@@ -11,24 +12,50 @@ class Core:
         self.clockwise = clockwise # if the vortex direction is clockwise
         self.Gamma = Gamma  # circulation strength of the vortex core
 
+class Obstacle:
+
+    def __init__(self, x:float, y:float, r:float):
+
+        self.x = x # x coordinate of the obstacle center
+        self.y = y # y coordinate of the obstacle center
+        self.r = r # radius of the obstacle    
+
 class Map:
 
-    def __init__(self, cores:list):
+    def __init__(self, seed:int=0):
         
         # parameter initialization
-        self.width = 100 # x coordinate dimension of the map
-        self.height = 100 # y coordinate dimension of the map
+        self.rd = np.random.RandomState(seed) # PRNG 
+        self.width = 50 # x coordinate dimension of the map
+        self.height = 50 # y coordinate dimension of the map
         self.r = 0.5  # radius of vortex core
         self.v_rel_max = 0.5 # max allowable speed when two currents flowing towards each other
         self.p = 0.8 # max allowable relative speed at another vortex core
-        self.cores = [] # vertex cores 
+        self.v_max = 8 # max speed of the vortex (at the edge of core)
+        self.obs_r_max = 5 # max radius of the obstacle
+        self.cores = [] # vertex cores
+        self.obstacles = [] # cylinder obstacles 
 
-        for i,core in enumerate(cores):
+        self.reset_map()
+
+    def reset_map(self, num_cores:int = 5, num_obs:int = 5):
+        
+        self.cores.clear()
+        self.obstacles.clear()
+
+        # generate vortex with random position, spinning direction and strength
+        while True:
+            center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
+            direction = self.rd.binomial(1,0.5)
+            v_edge = self.rd.uniform(low = 0, high = self.v_max)
+            Gamma = 2 * np.pi * self.r * v_edge
+            core = Core(center[0],center[1],direction,Gamma)
             if self.check_core(core):
                 self.cores.append(core)
-            else:
-                raise RuntimeError("core "+str(i)+" is not viable")
-
+                num_cores -= 1
+            if num_cores == 0:
+                break
+        
         centers = None
         for core in self.cores:
             if centers is None:
@@ -39,6 +66,17 @@ class Map:
         
         # KDTree storing vortex core center positions
         self.core_centers = scipy.spatial.KDTree(centers)
+
+        # generate obstacles with random position and size
+        while True:
+            center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
+            r = self.rd.uniform(low = 0.0, high = self.obs_r_max)
+            obs = Obstacle(center[0],center[1],r)
+            if self.check_obstacle(obs):
+                self.obstacles.append(obs)
+                num_obs -= 1
+            if num_obs == 0:
+                break
 
     def check_core(self,core_j):
 
@@ -64,7 +102,29 @@ class Map:
                 if v_1 > self.p * v_2:
                     return False
 
-        return True    
+        return True
+
+    def check_obstacle(self,obs):
+
+        # Not collide with vortex cores
+        for core in self.cores:
+            dx = core.x - obs.x
+            dy = core.y - obs.y
+            dis = np.sqrt(dx*dx + dy*dy)
+
+            if dis <= self.r + obs.r:
+                return False
+        
+        # Not collide with other obstacles
+        for obstacle in self.obstacles:
+            dx = obstacle.x - obs.x
+            dy = obstacle.y - obs.y
+            dis = np.sqrt(dx*dx + dy*dy)
+
+            if dis <= obstacle.r + obs.r:
+                return False
+        
+        return True
 
     def get_velocity(self,x:float, y:float):
         # sort the vortices according to their distance to the query point
@@ -117,6 +177,14 @@ class Map:
                 arrow_y.append(v[1,0])
         
         fig, ax = plt.subplots()
-        ax.quiver(pos_x, pos_y, arrow_x, arrow_y)
         
+        # plot current velocity
+        ax.quiver(pos_x, pos_y, arrow_x, arrow_y)
+
+        # plot obstacles
+        for obs in self.obstacles:
+            ax.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
+        
+        ax.set_aspect('equal')
+
         plt.show()
