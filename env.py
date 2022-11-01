@@ -20,7 +20,7 @@ class Obstacle:
         self.y = y # y coordinate of the obstacle center
         self.r = r # radius of the obstacle    
 
-class Map:
+class Env:
 
     def __init__(self, seed:int=0):
         
@@ -31,14 +31,15 @@ class Map:
         self.r = 0.5  # radius of vortex core
         self.v_rel_max = 0.5 # max allowable speed when two currents flowing towards each other
         self.p = 0.8 # max allowable relative speed at another vortex core
-        self.v_max = 8 # max speed of the vortex (at the edge of core)
-        self.obs_r_max = 5 # max radius of the obstacle
+        self.v_range = [5,10] # speed range of the vortex (at the edge of core)
+        self.obs_r_range = [1,5] # radius range of the obstacle
         self.cores = [] # vertex cores
         self.obstacles = [] # cylinder obstacles 
 
-        self.reset_map()
+        self.reset()
 
-    def reset_map(self, num_cores:int = 5, num_obs:int = 5):
+    def reset(self, num_cores:int = 5, num_obs:int = 5):
+        # reset the environment
         
         self.cores.clear()
         self.obstacles.clear()
@@ -47,7 +48,7 @@ class Map:
         while True:
             center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
             direction = self.rd.binomial(1,0.5)
-            v_edge = self.rd.uniform(low = 0, high = self.v_max)
+            v_edge = self.rd.uniform(low = self.v_range[0], high = self.v_range[1])
             Gamma = 2 * np.pi * self.r * v_edge
             core = Core(center[0],center[1],direction,Gamma)
             if self.check_core(core):
@@ -70,13 +71,25 @@ class Map:
         # generate obstacles with random position and size
         while True:
             center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
-            r = self.rd.uniform(low = 0.0, high = self.obs_r_max)
+            r = self.rd.uniform(low = self.obs_r_range[0], high = self.obs_r_range[1])
             obs = Obstacle(center[0],center[1],r)
             if self.check_obstacle(obs):
                 self.obstacles.append(obs)
                 num_obs -= 1
             if num_obs == 0:
                 break
+
+    def step(self, action):
+        # execute action and update the environment
+        pass
+
+    def get_obs(self):
+        # provide observation for the agent
+        pass
+
+    def get_reward(self):
+        # return reward
+        pass
 
     def check_core(self,core_j):
 

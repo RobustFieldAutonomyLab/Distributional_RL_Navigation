@@ -1,4 +1,4 @@
-import current_model
+import env
 
 if __name__ == "__main__":
     # core_1 = current_model.Core(25,75,True,10)
@@ -8,5 +8,5 @@ if __name__ == "__main__":
     # core_5 = current_model.Core(75,25,True,5)
 
     # map = current_model.Map([core_1,core_2,core_3,core_4,core_5])
-    map = current_model.Map()
+    map = env.Env()
     map.visualization() 
