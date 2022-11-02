@@ -2,6 +2,7 @@ import numpy as np
 import scipy
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import robot
 
 class Core:
 
@@ -34,7 +35,9 @@ class Env:
         self.v_range = [5,10] # speed range of the vortex (at the edge of core)
         self.obs_r_range = [1,5] # radius range of the obstacle
         self.cores = [] # vertex cores
-        self.obstacles = [] # cylinder obstacles 
+        self.obstacles = [] # cylinder obstacles
+
+        self.robot 
 
         self.reset()
 
@@ -80,16 +83,9 @@ class Env:
                 break
 
     def step(self, action):
-        # execute action and update the environment
-        pass
-
-    def get_obs(self):
-        # provide observation for the agent
-        pass
-
-    def get_reward(self):
-        # return reward
-        pass
+        # execute action, update the environment, and return (obs, reward, done)
+        
+        return obs, reward, done
 
     def check_core(self,core_j):
 
