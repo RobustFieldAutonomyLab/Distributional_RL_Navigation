@@ -37,7 +37,10 @@ class Env:
         self.cores = [] # vertex cores
         self.obstacles = [] # cylinder obstacles
 
-        self.robot 
+        self.initial = [5.0,5.0] # robot inital position
+        self.goal = [45.0,45.0] # goal position
+
+        self.robot = robot.Robot
 
         self.reset()
 
@@ -82,11 +85,23 @@ class Env:
             if num_obs == 0:
                 break
 
-    def step(self, action):
-        # execute action, update the environment, and return (obs, reward, done)
-        
-        return obs, reward, done
+        # reset robot state
+        self.robot.set_state(self.initial[0],self.initial[1])
 
+    def step(self, action):
+        # execute action (linear acceleration, angular velocity), update the environment, and return (obs, reward, done)
+
+        # update robot state after executing the action    
+        for _ in range(self.robot.N):
+            current_velocity = self.get_velocity(self.robot.pos_x, self.robot.pos_y)
+            self.robot.update_state(action,current_velocity)
+
+        # generate observation
+        current_velocity = self.get_velocity(self.robot.pos_x, self.robot.pos_y)
+        
+
+        return obs, reward, done
+    
     def check_core(self,core_j):
 
         for core_i in self.cores:
@@ -161,7 +176,7 @@ class Env:
             speed = self.compute_speed(core.Gamma,dis)
             v_velocity += v_tangent * speed
         
-        return v_velocity
+        return np.array([v_velocity[0,0], v_velocity[1,0]])
 
     def compute_speed(self, Gamma:float, d:float):
         if d <= self.r:
@@ -182,8 +197,8 @@ class Env:
                 v = self.get_velocity(x,y)
                 pos_x.append(x)
                 pos_y.append(y)
-                arrow_x.append(v[0,0])
-                arrow_y.append(v[1,0])
+                arrow_x.append(v[0])
+                arrow_y.append(v[1])
         
         fig, ax = plt.subplots()
         
