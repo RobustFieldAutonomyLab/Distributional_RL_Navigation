@@ -96,11 +96,41 @@ class Env:
             current_velocity = self.get_velocity(self.robot.pos_x, self.robot.pos_y)
             self.robot.update_state(action,current_velocity)
 
-        # generate observation
-        current_velocity = self.get_velocity(self.robot.pos_x, self.robot.pos_y)
-        
-
         return obs, reward, done
+
+    def get_observation(self):
+
+        # generate observation (1.vehicle velocity wrt seafloor in robot frame by DVL, 
+        #                       2.obstacle reflection point clouds in robot frame by Sonar,
+        #                       3.goal position in robot frame)
+        current_velocity = self.get_velocity(self.robot.pos_x, self.robot.pos_y)
+        steer_velocity = self.robot.get_steer_velocity()
+        abs_velocity = current_velocity + steer_velocity
+
+        sonar_points = []
+        for obs in self.obstacles:
+            sonar_points += self.robot.sonar_reflection(obs.x,obs.y,obs.r)
+
+        # convert information in world frame to robot frame
+        R_wr, t_wr = self.robot.get_robot_transform()
+
+        R_rw = np.transpose(R_wr)
+        t_rw = -R_rw * t_wr
+
+        abs_velocity_r = R_rw * np.reshape(abs_velocity,(2,1))
+        sonar_points_r = None
+        for point in sonar_points:
+            p_w = np.reshape(point,(2,1))
+            p_r = R_rw * p_w + t_rw
+            if sonar_points is None:
+                sonar_points = p_r
+            else:
+                sonar_points = np.hstack((sonar_points,p_r))
+
+        goal_w = np.reshape(self.goal,(2,1))
+        goal_r = R_rw * goal_w + t_rw
+
+        
     
     def check_core(self,core_j):
 
