@@ -86,30 +86,25 @@ class Env:
                 break
 
         # reset robot state
-        self.robot.set_state(self.initial[0],self.initial[1])
+        current_v = self.get_velocity(self.initial[0],self.initial[1])
+        self.robot.set_state(self.initial[0],self.initial[1],current_velocity=current_v)
 
     def step(self, action):
         # execute action (linear acceleration, angular velocity), update the environment, and return (obs, reward, done)
 
         # update robot state after executing the action    
         for _ in range(self.robot.N):
-            current_velocity = self.get_velocity(self.robot.pos_x, self.robot.pos_y)
+            current_velocity = self.get_velocity(self.robot.x, self.robot.y)
             self.robot.update_state(action,current_velocity)
 
-        return obs, reward, done
+        # return obs, reward, done
 
     def get_observation(self):
 
         # generate observation (1.vehicle velocity wrt seafloor in robot frame by DVL, 
         #                       2.obstacle reflection point clouds in robot frame by Sonar,
         #                       3.goal position in robot frame)
-        current_velocity = self.get_velocity(self.robot.pos_x, self.robot.pos_y)
-        steer_velocity = self.robot.get_steer_velocity()
-        abs_velocity = current_velocity + steer_velocity
-
-        sonar_points = []
-        for obs in self.obstacles:
-            sonar_points += self.robot.sonar_reflection(obs.x,obs.y,obs.r)
+        self.robot.sonar_reflection(self.obstacles)
 
         # convert information in world frame to robot frame
         R_wr, t_wr = self.robot.get_robot_transform()
@@ -117,20 +112,20 @@ class Env:
         R_rw = np.transpose(R_wr)
         t_rw = -R_rw * t_wr
 
-        abs_velocity_r = R_rw * np.reshape(abs_velocity,(2,1))
+        abs_velocity_r = R_rw * np.reshape(self.robot.velocity,(2,1))
         sonar_points_r = None
-        for point in sonar_points:
-            p_w = np.reshape(point,(2,1))
-            p_r = R_rw * p_w + t_rw
-            if sonar_points is None:
-                sonar_points = p_r
+        for point in self.robot.sonar.reflections:
+            p = np.reshape(point,(3,1))
+            p[:2] = R_rw * p[:2] + t_rw
+            if sonar_points_r is None:
+                sonar_points_r = p
             else:
-                sonar_points = np.hstack((sonar_points,p_r))
+                sonar_points_r = np.hstack((sonar_points_r,p))
 
         goal_w = np.reshape(self.goal,(2,1))
         goal_r = R_rw * goal_w + t_rw
 
-        
+        return abs_velocity_r, sonar_points_r, goal_r
     
     def check_core(self,core_j):
 
@@ -230,15 +225,56 @@ class Env:
                 arrow_x.append(v[0])
                 arrow_y.append(v[1])
         
-        fig, ax = plt.subplots()
+        # plot the map, robot state and sensor measurments
+        fig = plt.figure(figsize=(24,16))
+        spec = fig.add_gridspec(2,3)
+        axis_graph = fig.add_subplot(spec[:,:2])
+        axis_sonar = fig.add_subplot(spec[0,2])
+        axis_dvl = fig.add_subplot(spec[1,2])
         
         # plot current velocity
-        ax.quiver(pos_x, pos_y, arrow_x, arrow_y)
+        axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y)
 
         # plot obstacles
         for obs in self.obstacles:
-            ax.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
+            axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
         
-        ax.set_aspect('equal')
+        # plot the robot
+        xy = (self.robot.x-0.5*self.robot.length,self.robot.y-0.5*self.robot.width)
+        angle_d = self.robot.theta / np.pi * 180
+        axis_graph.add_patch(mpl.patches.Rectangle(xy,self.robot.length, \
+                                                   self.robot.width,     \
+                                                   angle=angle_d,rotation_point='center'))
+
+        abs_velocity_r, sonar_points_r, goal_r = self.get_observation()
+        
+        # plot Sonar beams in the world frame
+        for point in self.sonar.reflections:
+            x = point[0]
+            y = point[1]
+            if point[-1] == 0:
+                # only plot beam range
+                x = self.robot.x + 0.5 * (x-self.robot.x)
+                y = self.robot.y + 0.5 * (y-self.robot.y)
+            else:
+                # mark the reflection point
+                axis_graph.plot(x,y,'rx')
+
+            axis_graph.plot([self.robot.x,x],[self.robot.y,y],'r--')
+
+        # plot Sonar reflections in the robot frame
+        low_angle = self.robot.theta + self.robot.sonar.beam_angles[0]
+        high_angle = self.robot.theta + self.robot.sonar.beam_angles[-1]
+        axis_sonar.add_patch(mpl.patches.Wedge((0.0,0.0),self.robot.sonar.range, \
+                                               low_angle,high_angle,color="r",alpha=0.2))
+        
+        for i in range(np.shape(sonar_points_r)[1]):
+            if sonar_points_r[2,i] == 1:
+                axis_sonar.plot(sonar_points_r[0,i],sonar_points_r[1,i])
+
+        # plot robot velocity in the robot frame
+        
+
+        axis_graph.set_aspect('equal')
 
         plt.show()
