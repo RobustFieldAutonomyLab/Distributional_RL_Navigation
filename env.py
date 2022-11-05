@@ -40,7 +40,7 @@ class Env:
         self.initial = [5.0,5.0] # robot inital position
         self.goal = [45.0,45.0] # goal position
 
-        self.robot = robot.Robot
+        self.robot = robot.Robot()
 
         self.reset()
 
@@ -113,6 +113,8 @@ class Env:
         t_rw = -R_rw * t_wr
 
         abs_velocity_r = R_rw * np.reshape(self.robot.velocity,(2,1))
+        abs_velocity_r.resize((2,))
+
         sonar_points_r = None
         for point in self.robot.sonar.reflections:
             p = np.reshape(point,(3,1))
@@ -240,16 +242,21 @@ class Env:
             axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
         
         # plot the robot
-        xy = (self.robot.x-0.5*self.robot.length,self.robot.y-0.5*self.robot.width)
+        d = np.matrix([[0.5*self.robot.length],[0.5*self.robot.width]])
+        rot = np.matrix([[np.cos(self.robot.theta),-np.sin(self.robot.theta)], \
+                         [np.sin(self.robot.theta),np.cos(self.robot.theta)]])
+        d_r = rot * d
+        xy = (self.robot.x-d_r[0,0],self.robot.y-d_r[1,0])
+
         angle_d = self.robot.theta / np.pi * 180
         axis_graph.add_patch(mpl.patches.Rectangle(xy,self.robot.length, \
                                                    self.robot.width,     \
-                                                   angle=angle_d,rotation_point='center'))
+                                                   color='g',angle=angle_d,zorder=6))
 
         abs_velocity_r, sonar_points_r, goal_r = self.get_observation()
         
         # plot Sonar beams in the world frame
-        for point in self.sonar.reflections:
+        for point in self.robot.sonar.reflections:
             x = point[0]
             y = point[1]
             if point[-1] == 0:
@@ -262,19 +269,45 @@ class Env:
 
             axis_graph.plot([self.robot.x,x],[self.robot.y,y],'r--')
 
-        # plot Sonar reflections in the robot frame
-        low_angle = self.robot.theta + self.robot.sonar.beam_angles[0]
-        high_angle = self.robot.theta + self.robot.sonar.beam_angles[-1]
+        axis_graph.set_aspect('equal')
+
+        # plot Sonar reflections in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
+        low_angle = np.pi/2 + self.robot.sonar.beam_angles[0]
+        high_angle = np.pi/2 + self.robot.sonar.beam_angles[-1]
+        low_angle_d = low_angle / np.pi * 180
+        high_angle_d = high_angle / np.pi * 180
         axis_sonar.add_patch(mpl.patches.Wedge((0.0,0.0),self.robot.sonar.range, \
-                                               low_angle,high_angle,color="r",alpha=0.2))
+                                               low_angle_d,high_angle_d,color="r",alpha=0.2))
         
         for i in range(np.shape(sonar_points_r)[1]):
             if sonar_points_r[2,i] == 1:
-                axis_sonar.plot(sonar_points_r[0,i],sonar_points_r[1,i])
+                # rotate by 90 degree 
+                axis_sonar.plot(-sonar_points_r[1,i],sonar_points_r[0,i],'bx')
 
-        # plot robot velocity in the robot frame
-        
+        axis_sonar.set_xlim([-self.robot.sonar.range-1,self.robot.sonar.range+1])
+        axis_sonar.set_ylim([-1,self.robot.sonar.range+1])
+        axis_sonar.set_aspect('equal')
+        axis_sonar.set_title('Sonar measurement')
 
-        axis_graph.set_aspect('equal')
+        # plot robot velocity in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
+        axis_dvl.arrow(0.0,0.0,0.0,1.0, \
+                       color='k', \
+                       width = 0.01, \
+                       head_width = 0.06, \
+                       head_length = 0.1, \
+                       length_includes_head=True, \
+                       label='steer direction')
+        # rotate by 90 degree
+        axis_dvl.arrow(0.0,0.0,-abs_velocity_r[1],abs_velocity_r[0], \
+                       color='r',width=0.01, head_width = 0.06, \
+                       head_length = 0.1, length_includes_head=True, \
+                       label='velocity wrt seafloor')
+        x_range = np.max([2,np.abs(abs_velocity_r[0])])
+        y_range = np.max([2,np.abs(abs_velocity_r[1])])
+        axis_dvl.set_xlim([-x_range,x_range])
+        axis_dvl.set_ylim([-1,y_range])
+        axis_dvl.set_aspect('equal')
+        axis_dvl.legend()
+        axis_dvl.set_title('DVL measurement')
 
         plt.show()

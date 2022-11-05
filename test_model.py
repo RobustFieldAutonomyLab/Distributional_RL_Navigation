@@ -1,3 +1,4 @@
+import numpy as np
 import env
 
 if __name__ == "__main__":
@@ -9,4 +10,6 @@ if __name__ == "__main__":
 
     # map = current_model.Map([core_1,core_2,core_3,core_4,core_5])
     map = env.Env()
+    current_v = map.get_velocity(30.0,20.0)
+    map.robot.set_state(30.0,20.0,np.pi/6,current_velocity=current_v)
     map.visualization() 

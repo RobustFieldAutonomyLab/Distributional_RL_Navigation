@@ -1,11 +1,10 @@
 import numpy as np
-import env
 
 class Sonar:
 
     def __init__(self):
         # 2D model with detection area as a sector
-        self.range = 10 # meter
+        self.range = 10.0 # meter
         self.angle = 2 * np.pi / 3
         self.num_beams = 11 # number of beams (asssume each is a line)
         self.phi = self.angle / (self.num_beams-1) # interval angle between two beams
@@ -14,15 +13,14 @@ class Sonar:
 
         angle = -self.angle/2
         for i in range(self.num_beams):
-            angle += i * self.phi
-            self.beam_angles.append(angle)
+            self.beam_angles.append(angle + i * self.phi)
 
 class Robot:
 
     def __init__(self):
         self.dt = 0.1 # discretized time step (second)
         self.N = 10 # number of time step per action
-        self.sonar = Sonar
+        self.sonar = Sonar()
         self.length = 1.0 
         self.width = 0.5
         self.x = None # x coordinate
@@ -40,7 +38,7 @@ class Robot:
 
     def get_robot_transform(self):
         # compute transformation from world frame to robot frame
-        R_wr = np.matrix([[np.cos(self.theta) -np.sin(self.theta)],[np.sin(self.theta),np.cos(self.theta)]])
+        R_wr = np.matrix([[np.cos(self.theta),-np.sin(self.theta)],[np.sin(self.theta),np.cos(self.theta)]])
         t_wr = np.matrix([[self.x],[self.y]])
         return R_wr, t_wr
 
@@ -81,7 +79,7 @@ class Robot:
 
             # initialize the beam reflection as null
             if np.abs(angle - np.pi/2) < 1e-03 or \
-                np.abs(angle + 3*np.pi/2) < 1e-03:
+                np.abs(angle - 3*np.pi/2) < 1e-03:
                 d = 2.0 if np.abs(angle - np.pi/2) < 1e-03 else -2.0
                 x = self.x
                 y = self.y + d*self.sonar.range
@@ -97,7 +95,7 @@ class Robot:
                 if self.sonar.reflections[-1][-1] != 0:
                     break
                 if np.abs(angle - np.pi/2) < 1e-03 or \
-                    np.abs(angle + 3*np.pi/2) < 1e-03:
+                    np.abs(angle - 3*np.pi/2) < 1e-03:
                     # vertical line
                     M = obs.r*obs.r - (self.x-obs.x)*(self.x-obs.x)
                     
@@ -127,16 +125,18 @@ class Robot:
                     y1 = self.y+K*(x1-self.x)
                     y2 = self.y+K*(x2-self.x)
 
-                dis1 = np.sqrt((x1-self.x)*(x1-self.x)+(y1-self.y)*((y1-self.y)))
-                dis2 = np.sqrt((x2-self.x)*(x2-self.x)+(y2-self.y)*((y2-self.y)))
-                if np.min(dis1,dis2) > self.sonar.range:
+                v1 = np.array([x1-self.x,y1-self.y])
+                v2 = np.array([x2-self.x,y2-self.y])
+
+                v = v1 if np.linalg.norm(v1) < np.linalg.norm(v2) else v2
+                if np.linalg.norm(v) > self.sonar.range:
                     # beyond detection range
                     continue
-                if dis1 < dis2:
-                    self.sonar.reflections[-1] = [x1,y1,1]
-                else:
-                    self.sonar.reflections[-1] = [x2,y2,1]
+                if np.dot(v,np.array([np.cos(angle),np.sin(angle)])) < 0.0:
+                    # the intesection point is in the opposite direction of the beam
+                    continue
 
+                self.sonar.reflections[-1] = [v[0]+self.x,v[1]+self.y,1]
 
                      
 
