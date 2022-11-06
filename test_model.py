@@ -13,4 +13,4 @@ if __name__ == "__main__":
     # current_v = map.get_velocity(30.0,20.0)
     # map.robot.set_state(30.0,20.0,np.pi/6,current_velocity=current_v)
     map.init_visualize()
-    map.visualize_control([15.0,0.785])
+    map.visualize_control([5.0,0.785])

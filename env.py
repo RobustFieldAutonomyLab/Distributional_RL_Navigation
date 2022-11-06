@@ -351,7 +351,7 @@ class Env:
         for _ in range(self.robot.N-1):
             actions.append(action)
 
-        animation = mpl.animation.FuncAnimation(self.fig,self.one_step,actions, \
+        self.animation = mpl.animation.FuncAnimation(self.fig,self.one_step,actions, \
                                                 interval=0.0,repeat=False)
 
-        plt.show()
+        plt.show(block=False)
