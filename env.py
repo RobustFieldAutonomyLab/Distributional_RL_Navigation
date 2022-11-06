@@ -44,6 +44,11 @@ class Env:
 
         self.reset()
 
+        self.fig = None # figure for visualization
+        self.axis_graph = None # sub figure for the map
+        self.axis_sonar = None # sub figure for Sonar measurement
+        self.axis_dvl = None # sub figure for DVL measurement
+
     def reset(self, num_cores:int = 5, num_obs:int = 5):
         # reset the environment
         
@@ -211,7 +216,7 @@ class Env:
         else:
             return Gamma / (2*np.pi*d)          
 
-    def visualization(self):
+    def init_visualize(self):
         x_pos = list(np.linspace(0,self.width,100))
         y_pos = list(np.linspace(0,self.height,100))
 
@@ -228,18 +233,18 @@ class Env:
                 arrow_y.append(v[1])
         
         # plot the map, robot state and sensor measurments
-        fig = plt.figure(figsize=(24,16))
-        spec = fig.add_gridspec(2,3)
-        axis_graph = fig.add_subplot(spec[:,:2])
-        axis_sonar = fig.add_subplot(spec[0,2])
-        axis_dvl = fig.add_subplot(spec[1,2])
+        self.fig = plt.figure(figsize=(24,16))
+        spec = self.fig.add_gridspec(2,3)
+        self.axis_graph = self.fig.add_subplot(spec[:,:2])
+        self.axis_sonar = self.fig.add_subplot(spec[0,2])
+        self.axis_dvl = self.fig.add_subplot(spec[1,2])
         
         # plot current velocity
-        axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y)
+        self.axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y)
 
         # plot obstacles
         for obs in self.obstacles:
-            axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
+            self.axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
         
         # plot the robot
         d = np.matrix([[0.5*self.robot.length],[0.5*self.robot.width]])
@@ -249,7 +254,7 @@ class Env:
         xy = (self.robot.x-d_r[0,0],self.robot.y-d_r[1,0])
 
         angle_d = self.robot.theta / np.pi * 180
-        axis_graph.add_patch(mpl.patches.Rectangle(xy,self.robot.length, \
+        self.axis_graph.add_patch(mpl.patches.Rectangle(xy,self.robot.length, \
                                                    self.robot.width,     \
                                                    color='g',angle=angle_d,zorder=6))
 
@@ -265,32 +270,32 @@ class Env:
                 y = self.robot.y + 0.5 * (y-self.robot.y)
             else:
                 # mark the reflection point
-                axis_graph.plot(x,y,'rx')
+                self.axis_graph.plot(x,y,'rx')
 
-            axis_graph.plot([self.robot.x,x],[self.robot.y,y],'r--')
+            self.axis_graph.plot([self.robot.x,x],[self.robot.y,y],'r--')
 
-        axis_graph.set_aspect('equal')
+        self.axis_graph.set_aspect('equal')
 
         # plot Sonar reflections in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
         low_angle = np.pi/2 + self.robot.sonar.beam_angles[0]
         high_angle = np.pi/2 + self.robot.sonar.beam_angles[-1]
         low_angle_d = low_angle / np.pi * 180
         high_angle_d = high_angle / np.pi * 180
-        axis_sonar.add_patch(mpl.patches.Wedge((0.0,0.0),self.robot.sonar.range, \
+        self.axis_sonar.add_patch(mpl.patches.Wedge((0.0,0.0),self.robot.sonar.range, \
                                                low_angle_d,high_angle_d,color="r",alpha=0.2))
         
         for i in range(np.shape(sonar_points_r)[1]):
             if sonar_points_r[2,i] == 1:
                 # rotate by 90 degree 
-                axis_sonar.plot(-sonar_points_r[1,i],sonar_points_r[0,i],'bx')
+                self.axis_sonar.plot(-sonar_points_r[1,i],sonar_points_r[0,i],'bx')
 
-        axis_sonar.set_xlim([-self.robot.sonar.range-1,self.robot.sonar.range+1])
-        axis_sonar.set_ylim([-1,self.robot.sonar.range+1])
-        axis_sonar.set_aspect('equal')
-        axis_sonar.set_title('Sonar measurement')
+        self.axis_sonar.set_xlim([-self.robot.sonar.range-1,self.robot.sonar.range+1])
+        self.axis_sonar.set_ylim([-1,self.robot.sonar.range+1])
+        self.axis_sonar.set_aspect('equal')
+        self.axis_sonar.set_title('Sonar measurement')
 
         # plot robot velocity in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
-        axis_dvl.arrow(0.0,0.0,0.0,1.0, \
+        self.axis_dvl.arrow(0.0,0.0,0.0,1.0, \
                        color='k', \
                        width = 0.01, \
                        head_width = 0.06, \
@@ -298,16 +303,16 @@ class Env:
                        length_includes_head=True, \
                        label='steer direction')
         # rotate by 90 degree
-        axis_dvl.arrow(0.0,0.0,-abs_velocity_r[1],abs_velocity_r[0], \
+        self.axis_dvl.arrow(0.0,0.0,-abs_velocity_r[1],abs_velocity_r[0], \
                        color='r',width=0.01, head_width = 0.06, \
                        head_length = 0.1, length_includes_head=True, \
                        label='velocity wrt seafloor')
         x_range = np.max([2,np.abs(abs_velocity_r[0])])
         y_range = np.max([2,np.abs(abs_velocity_r[1])])
-        axis_dvl.set_xlim([-x_range,x_range])
-        axis_dvl.set_ylim([-1,y_range])
-        axis_dvl.set_aspect('equal')
-        axis_dvl.legend()
-        axis_dvl.set_title('DVL measurement')
+        self.axis_dvl.set_xlim([-x_range,x_range])
+        self.axis_dvl.set_ylim([-1,y_range])
+        self.axis_dvl.set_aspect('equal')
+        self.axis_dvl.legend()
+        self.axis_dvl.set_title('DVL measurement')
 
         plt.show()
