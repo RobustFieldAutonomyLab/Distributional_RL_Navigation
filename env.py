@@ -1,3 +1,4 @@
+from matplotlib.animation import Animation
 import numpy as np
 import scipy
 import matplotlib as mpl
@@ -46,6 +47,9 @@ class Env:
 
         self.fig = None # figure for visualization
         self.axis_graph = None # sub figure for the map
+        self.robot_sec = None  
+        self.robot_last_pos = None
+        self.sonar_sec = []
         self.axis_sonar = None # sub figure for Sonar measurement
         self.axis_dvl = None # sub figure for DVL measurement
 
@@ -232,21 +236,26 @@ class Env:
                 arrow_x.append(v[0])
                 arrow_y.append(v[1])
         
-        # plot the map, robot state and sensor measurments
+        # initialize subplot for the map, robot state and sensor measurments
         self.fig = plt.figure(figsize=(24,16))
         spec = self.fig.add_gridspec(2,3)
         self.axis_graph = self.fig.add_subplot(spec[:,:2])
         self.axis_sonar = self.fig.add_subplot(spec[0,2])
         self.axis_dvl = self.fig.add_subplot(spec[1,2])
         
-        # plot current velocity
+        # plot current velocity in the map
         self.axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y)
 
-        # plot obstacles
+        # plot obstacles in the map
         for obs in self.obstacles:
             self.axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
-        
-        # plot the robot
+
+        self.axis_graph.set_aspect('equal')
+    
+    def plot_robot(self):
+        if self.robot_sec != None:
+            self.robot_sec.remove()
+
         d = np.matrix([[0.5*self.robot.length],[0.5*self.robot.width]])
         rot = np.matrix([[np.cos(self.robot.theta),-np.sin(self.robot.theta)], \
                          [np.sin(self.robot.theta),np.cos(self.robot.theta)]])
@@ -254,10 +263,24 @@ class Env:
         xy = (self.robot.x-d_r[0,0],self.robot.y-d_r[1,0])
 
         angle_d = self.robot.theta / np.pi * 180
-        self.axis_graph.add_patch(mpl.patches.Rectangle(xy,self.robot.length, \
+        self.robot_sec = self.axis_graph.add_patch(mpl.patches.Rectangle(xy,self.robot.length, \
                                                    self.robot.width,     \
                                                    color='g',angle=angle_d,zorder=6))
 
+        if self.robot_last_pos != None:
+            self.axis_graph.plot((self.robot_last_pos[0],self.robot.x),
+                                 (self.robot_last_pos[1],self.robot.y),
+                                 color='m')
+        
+        self.robot_last_pos = [self.robot.x, self.robot.y]
+
+    def plot_measurements(self):
+        self.axis_sonar.clear()
+        self.axis_dvl.clear()
+        for plot in self.sonar_sec:
+            plot[0].remove()
+        self.sonar_sec.clear()
+        
         abs_velocity_r, sonar_points_r, goal_r = self.get_observation()
         
         # plot Sonar beams in the world frame
@@ -270,11 +293,9 @@ class Env:
                 y = self.robot.y + 0.5 * (y-self.robot.y)
             else:
                 # mark the reflection point
-                self.axis_graph.plot(x,y,'rx')
+                self.sonar_sec.append(self.axis_graph.plot(x,y,'rx'))
 
-            self.axis_graph.plot([self.robot.x,x],[self.robot.y,y],'r--')
-
-        self.axis_graph.set_aspect('equal')
+            self.sonar_sec.append(self.axis_graph.plot([self.robot.x,x],[self.robot.y,y],'r--'))
 
         # plot Sonar reflections in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
         low_angle = np.pi/2 + self.robot.sonar.beam_angles[0]
@@ -307,12 +328,30 @@ class Env:
                        color='r',width=0.01, head_width = 0.06, \
                        head_length = 0.1, length_includes_head=True, \
                        label='velocity wrt seafloor')
-        x_range = np.max([2,np.abs(abs_velocity_r[0])])
-        y_range = np.max([2,np.abs(abs_velocity_r[1])])
+        x_range = np.max([2,np.abs(abs_velocity_r[1])])
+        y_range = np.max([2,np.abs(abs_velocity_r[0])])
         self.axis_dvl.set_xlim([-x_range,x_range])
         self.axis_dvl.set_ylim([-1,y_range])
         self.axis_dvl.set_aspect('equal')
         self.axis_dvl.legend()
         self.axis_dvl.set_title('DVL measurement')
+
+    def one_step(self,action):
+        current_velocity = self.get_velocity(self.robot.x, self.robot.y)
+        self.robot.update_state(action,current_velocity)
+        # print(self.robot.x, self.robot.y, self.robot.speed, self.robot.theta, \
+        #       np.linalg.norm(current_velocity), np.linalg.norm(self.robot.velocity))
+
+        self.plot_robot()
+        self.plot_measurements()
+
+    def visualize_control(self,action):
+        # update robot state and make animation when executing the action    
+        actions = []
+        for _ in range(self.robot.N-1):
+            actions.append(action)
+
+        animation = mpl.animation.FuncAnimation(self.fig,self.one_step,actions, \
+                                                interval=0.0,repeat=False)
 
         plt.show()

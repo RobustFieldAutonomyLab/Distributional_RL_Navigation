@@ -43,7 +43,7 @@ class Robot:
         return R_wr, t_wr
 
     def get_steer_velocity(self):
-        return self.speed * np.array(np.cos(self.theta), np.sin(self.theta))
+        return self.speed * np.array([np.cos(self.theta), np.sin(self.theta)])
 
     def update_velocity(self,current_velocity=np.zeros(2)):
         steer_velocity = self.get_steer_velocity()
