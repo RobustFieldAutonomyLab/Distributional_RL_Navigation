@@ -1,6 +1,6 @@
 from matplotlib.animation import Animation
 import numpy as np
-import scipy
+import scipy.spatial
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import robot
@@ -316,7 +316,7 @@ class Env:
         self.axis_sonar.set_title('Sonar measurement')
 
         # plot robot velocity in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
-        self.axis_dvl.arrow(0.0,0.0,0.0,1.0, \
+        h1 = self.axis_dvl.arrow(0.0,0.0,0.0,1.0, \
                        color='k', \
                        width = 0.01, \
                        head_width = 0.06, \
@@ -324,7 +324,7 @@ class Env:
                        length_includes_head=True, \
                        label='steer direction')
         # rotate by 90 degree
-        self.axis_dvl.arrow(0.0,0.0,-abs_velocity_r[1],abs_velocity_r[0], \
+        h2 = self.axis_dvl.arrow(0.0,0.0,-abs_velocity_r[1],abs_velocity_r[0], \
                        color='r',width=0.01, head_width = 0.06, \
                        head_length = 0.1, length_includes_head=True, \
                        label='velocity wrt seafloor')
@@ -333,7 +333,7 @@ class Env:
         self.axis_dvl.set_xlim([-x_range,x_range])
         self.axis_dvl.set_ylim([-1,y_range])
         self.axis_dvl.set_aspect('equal')
-        self.axis_dvl.legend()
+        self.axis_dvl.legend(handles=[h1,h2])
         self.axis_dvl.set_title('DVL measurement')
 
     def one_step(self,action):
@@ -352,6 +352,6 @@ class Env:
             actions.append(action)
 
         self.animation = mpl.animation.FuncAnimation(self.fig,self.one_step,actions, \
-                                                interval=0.0,repeat=False)
+                                                interval=100,repeat=False)
 
         plt.show(block=False)
