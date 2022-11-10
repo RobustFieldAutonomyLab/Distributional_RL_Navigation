@@ -28,13 +28,13 @@ class Env:
         
         # parameter initialization
         self.rd = np.random.RandomState(seed) # PRNG 
-        self.width = 50 # x coordinate dimension of the map
-        self.height = 50 # y coordinate dimension of the map
+        self.width = 25 # x coordinate dimension of the map
+        self.height = 25 # y coordinate dimension of the map
         self.r = 0.5  # radius of vortex core
-        self.v_rel_max = 0.5 # max allowable speed when two currents flowing towards each other
+        self.v_rel_max = 1.0 # max allowable speed when two currents flowing towards each other
         self.p = 0.8 # max allowable relative speed at another vortex core
-        self.v_range = [5,10] # speed range of the vortex (at the edge of core)
-        self.obs_r_range = [1,5] # radius range of the obstacle
+        self.v_range = [5,15] # speed range of the vortex (at the edge of core)
+        self.obs_r_range = [1,3] # radius range of the obstacle
         self.cores = [] # vertex cores
         self.obstacles = [] # cylinder obstacles
 
@@ -58,6 +58,8 @@ class Env:
         
         self.cores.clear()
         self.obstacles.clear()
+
+        # TODO: set timers for vortex and obstacle generation, break when time is up
 
         # generate vortex with random position, spinning direction and strength
         while True:
@@ -140,6 +142,12 @@ class Env:
     
     def check_core(self,core_j):
 
+        # Within the range of the map
+        if core_j.x - self.r < 0.0 or core_j.x + self.r > self.width:
+            return False
+        if core_j.y - self.r < 0.0 or core_j.y + self.r > self.width:
+            return False 
+
         for core_i in self.cores:
             dx = core_i.x - core_j.x
             dy = core_i.y - core_j.y
@@ -165,6 +173,12 @@ class Env:
         return True
 
     def check_obstacle(self,obs):
+
+        # Within the range of the map
+        if obs.x - obs.r < 0.0 or obs.x + obs.r > self.width:
+            return False
+        if obs.y - obs.r < 0.0 or obs.y + obs.r > self.height:
+            return False
 
         # Not collide with vortex cores
         for core in self.cores:
@@ -199,6 +213,8 @@ class Env:
             for v in v_radial_set:
                 project = np.transpose(v) * v_radial
                 if project[0,0] > 0:
+                    # if the core is in the outter area of a checked core (wrt the query position),
+                    # assume that it has no influence the velocity of the query position
                     continue
             
             v_radial_set.append(v_radial)
@@ -251,6 +267,8 @@ class Env:
             self.axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
 
         self.axis_graph.set_aspect('equal')
+        self.axis_graph.set_xlim([0.0,self.width])
+        self.axis_graph.set_ylim([0.0,self.height])
     
     def plot_robot(self):
         if self.robot_sec != None:
@@ -288,7 +306,7 @@ class Env:
             x = point[0]
             y = point[1]
             if point[-1] == 0:
-                # only plot beam range
+                # compute beam range end point 
                 x = self.robot.x + 0.5 * (x-self.robot.x)
                 y = self.robot.y + 0.5 * (y-self.robot.y)
             else:
