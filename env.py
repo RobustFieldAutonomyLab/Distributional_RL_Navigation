@@ -28,12 +28,12 @@ class Env:
         
         # parameter initialization
         self.rd = np.random.RandomState(seed) # PRNG 
-        self.width = 25 # x coordinate dimension of the map
-        self.height = 25 # y coordinate dimension of the map
+        self.width = 50 # x coordinate dimension of the map
+        self.height = 50 # y coordinate dimension of the map
         self.r = 0.5  # radius of vortex core
         self.v_rel_max = 1.0 # max allowable speed when two currents flowing towards each other
         self.p = 0.8 # max allowable relative speed at another vortex core
-        self.v_range = [5,15] # speed range of the vortex (at the edge of core)
+        self.v_range = [5,10] # speed range of the vortex (at the edge of core)
         self.obs_r_range = [1,3] # radius range of the obstacle
         self.cores = [] # vertex cores
         self.obstacles = [] # cylinder obstacles
@@ -53,25 +53,25 @@ class Env:
         self.axis_sonar = None # sub figure for Sonar measurement
         self.axis_dvl = None # sub figure for DVL measurement
 
-    def reset(self, num_cores:int = 5, num_obs:int = 5):
+    def reset(self, num_cores:int = 8, num_obs:int = 5):
         # reset the environment
         
         self.cores.clear()
         self.obstacles.clear()
 
-        # TODO: set timers for vortex and obstacle generation, break when time is up
-
         # generate vortex with random position, spinning direction and strength
+        iteration = 500
         while True:
             center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
             direction = self.rd.binomial(1,0.5)
             v_edge = self.rd.uniform(low = self.v_range[0], high = self.v_range[1])
             Gamma = 2 * np.pi * self.r * v_edge
             core = Core(center[0],center[1],direction,Gamma)
+            iteration -= 1
             if self.check_core(core):
                 self.cores.append(core)
                 num_cores -= 1
-            if num_cores == 0:
+            if iteration == 0 or num_cores == 0:
                 break
         
         centers = None
@@ -86,14 +86,16 @@ class Env:
         self.core_centers = scipy.spatial.KDTree(centers)
 
         # generate obstacles with random position and size
+        iteration = 500
         while True:
             center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
             r = self.rd.uniform(low = self.obs_r_range[0], high = self.obs_r_range[1])
             obs = Obstacle(center[0],center[1],r)
+            iteration -= 1
             if self.check_obstacle(obs):
                 self.obstacles.append(obs)
                 num_obs -= 1
-            if num_obs == 0:
+            if iteration == 0 or num_obs == 0:
                 break
 
         # reset robot state
