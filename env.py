@@ -47,7 +47,7 @@ class Env:
 
         self.fig = None # figure for visualization
         self.axis_graph = None # sub figure for the map
-        self.robot_sec = None  
+        self.robot_sec = None
         self.robot_last_pos = None
         self.sonar_sec = []
         self.axis_sonar = None # sub figure for Sonar measurement
@@ -237,6 +237,8 @@ class Env:
             return Gamma / (2*np.pi*d)          
 
     def init_visualize(self):
+        self.robot_last_pos = None
+
         x_pos = list(np.linspace(0,self.width,100))
         y_pos = list(np.linspace(0,self.height,100))
 
