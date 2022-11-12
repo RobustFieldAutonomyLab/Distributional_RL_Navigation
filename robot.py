@@ -28,7 +28,7 @@ class Robot:
         self.max_speed = 2.0
         self.a = np.array([-0.4,0.0,0.4]) # action[0]: linear accelerations (m/s^2)
         self.w = np.array([-np.pi/6,0.0,np.pi/6]) # action[1]: angular velocities (rad/s)
-        self.k = np.max(self.a)/self.max_speed # cofficient of water resistence 
+        self.k = np.max(self.a)/self.max_speed # cofficient of water resistance 
 
         self.x = None # x coordinate
         self.y = None # y coordinate
@@ -64,7 +64,7 @@ class Robot:
         self.y += dis[1]
         
         # update robot speed in one time step
-        # assume that water resistence force is proportion to the speed
+        # assume that water resistance force is proportion to the speed
         a = self.a[action[0]]
         self.speed += (a-self.k*self.speed) * self.dt
         self.speed = np.clip(self.speed,0.0,self.max_speed)
