@@ -35,16 +35,20 @@ class Env:
         self.p = 0.8 # max allowable relative speed at another vortex core
         self.v_range = [5,10] # speed range of the vortex (at the edge of core)
         self.obs_r_range = [1,3] # radius range of the obstacle
-        self.cores = [] # vertex cores
-        self.obstacles = [] # cylinder obstacles
+        self.clear_r = 5 # radius of area centered at start and goal where no vortex cores or obstacles exist
+        self.start = np.array([5.0,5.0]) # robot start position
+        self.goal = np.array([45.0,45.0]) # goal position
+        self.timestep_penalty = -1.0
+        self.energy_penalty = -1.0
+        self.collision_penalty = -50.0
+        self.goal_reward = 100.0
 
-        self.initial = [5.0,5.0] # robot inital position
-        self.goal = [45.0,45.0] # goal position
+        self.cores = [] # vortex cores
+        self.obstacles = [] # cylinder obstacles
 
         self.robot = robot.Robot()
 
-        self.reset()
-
+        # visualization
         self.fig = None # figure for visualization
         self.axis_graph = None # sub figure for the map
         self.robot_sec = None
@@ -52,6 +56,8 @@ class Env:
         self.sonar_sec = []
         self.axis_sonar = None # sub figure for Sonar measurement
         self.axis_dvl = None # sub figure for DVL measurement
+
+        self.reset()
 
     def reset(self, num_cores:int = 8, num_obs:int = 5):
         # reset the environment
@@ -99,8 +105,8 @@ class Env:
                 break
 
         # reset robot state
-        current_v = self.get_velocity(self.initial[0],self.initial[1])
-        self.robot.set_state(self.initial[0],self.initial[1],current_velocity=current_v)
+        current_v = self.get_velocity(self.start[0],self.start[1])
+        self.robot.set_state(self.start[0],self.start[1],current_velocity=current_v)
 
     def step(self, action):
         # execute action (linear acceleration, angular velocity), update the environment, and return (obs, reward, done)
@@ -110,7 +116,7 @@ class Env:
             current_velocity = self.get_velocity(self.robot.x, self.robot.y)
             self.robot.update_state(action,current_velocity)
 
-        # return obs, reward, done
+        # return obs, reward, done, info
 
     def get_observation(self):
 
@@ -141,6 +147,9 @@ class Env:
         goal_r = R_rw * goal_w + t_rw
 
         return abs_velocity_r, sonar_points_r, goal_r
+
+    def get_reward(self):
+        pass
     
     def check_core(self,core_j):
 
@@ -148,7 +157,16 @@ class Env:
         if core_j.x - self.r < 0.0 or core_j.x + self.r > self.width:
             return False
         if core_j.y - self.r < 0.0 or core_j.y + self.r > self.width:
-            return False 
+            return False
+
+        # Not too close to start and goal point
+        core_pos = np.array([core_j.x,core_j.y])
+        dis_s = core_pos - self.start
+        if np.linalg.norm(dis_s) < self.r + self.clear_r:
+            return False
+        dis_g = core_pos - self.goal
+        if np.linalg.norm(dis_g) < self.r + self.clear_r:
+            return False
 
         for core_i in self.cores:
             dx = core_i.x - core_j.x
@@ -180,6 +198,15 @@ class Env:
         if obs.x - obs.r < 0.0 or obs.x + obs.r > self.width:
             return False
         if obs.y - obs.r < 0.0 or obs.y + obs.r > self.height:
+            return False
+
+        # Not too close to start and goal point
+        obs_pos = np.array([obs.x,obs.y])
+        dis_s = obs_pos - self.start
+        if np.linalg.norm(dis_s) < obs.r + self.clear_r:
+            return False
+        dis_g = obs_pos - self.goal
+        if np.linalg.norm(dis_g) < obs.r + self.clear_r:
             return False
 
         # Not collide with vortex cores

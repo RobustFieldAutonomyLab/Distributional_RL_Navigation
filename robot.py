@@ -18,15 +18,22 @@ class Sonar:
 class Robot:
 
     def __init__(self):
+        
+        # parameter initialization
         self.dt = 0.1 # discretized time step (second)
         self.N = 10 # number of time step per action
         self.sonar = Sonar()
         self.length = 1.0 
         self.width = 0.5
+        self.max_speed = 2.0
+        self.a = np.array([-0.4,0.0,0.4]) # action[0]: linear accelerations (m/s^2)
+        self.w = np.array([-np.pi/6,0.0,np.pi/6]) # action[1]: angular velocities (rad/s)
+        self.k = np.max(self.a)/self.max_speed # cofficient of water resistence 
+
         self.x = None # x coordinate
         self.y = None # y coordinate
         self.theta = None # steering heading angle
-        self.speed = None # steering forward speed
+        self.speed = None # steering foward speed
         self.velocity = None # velocity wrt sea floor
 
     def set_state(self,x,y,theta=0.0,speed=0.0,current_velocity=np.zeros(2)):
@@ -56,10 +63,14 @@ class Robot:
         self.x += dis[0]
         self.y += dis[1]
         
-        # update robot heading angle and forward speed in one time step
-        a = action[0]
-        w = action[1]
-        self.speed += a * self.dt
+        # update robot speed in one time step
+        # assume that water resistence force is proportion to the speed
+        a = self.a[action[0]]
+        self.speed += (a-self.k*self.speed) * self.dt
+        self.speed = np.clip(self.speed,0.0,self.max_speed)
+        
+        # update robot heading angle in one time step
+        w = self.w[action[1]]
         self.theta += w * self.dt
 
         # warp theta to [0,2*pi)
