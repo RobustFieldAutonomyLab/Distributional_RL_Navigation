@@ -7,7 +7,7 @@ from gym import spaces
 from stable_baselines3.common.preprocessing import is_image_space, is_image_space_channels_first
 
 
-class StackedObservations(object):
+class StackedObservations:
     """
     Frame stacking wrapper for data.
 
@@ -18,6 +18,7 @@ class StackedObservations(object):
 
     :param num_envs: number of environments
     :param n_stack: Number of frames to stack
+    :param observation_space: Environment observation space.
     :param channels_order: If "first", stack on first image dimension. If "last", stack on last dimension.
         If None, automatically detect channel to stack over in case of image observation or default to "last" (default).
     """
@@ -125,7 +126,7 @@ class StackedObservations(object):
                     if self.channels_first:
                         new_terminal = np.concatenate(
                             (self.stackedobs[i, :-stack_ax_size, ...], old_terminal),
-                            axis=self.stack_dimension,
+                            axis=0,  # self.stack_dimension - 1, as there is not batch dim
                         )
                     else:
                         new_terminal = np.concatenate(
@@ -198,7 +199,7 @@ class StackedDictObservations(StackedObservations):
             spaces_dict[key] = spaces.Box(low=low, high=high, dtype=subspace.dtype)
         return spaces.Dict(spaces=spaces_dict)
 
-    def reset(self, observation: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def reset(self, observation: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:  # pytype: disable=signature-mismatch
         """
         Resets the stacked observations, adds the reset observation to the stack, and returns the stack
 
@@ -218,7 +219,7 @@ class StackedDictObservations(StackedObservations):
         observations: Dict[str, np.ndarray],
         dones: np.ndarray,
         infos: List[Dict[str, Any]],
-    ) -> Tuple[Dict[str, np.ndarray], List[Dict[str, Any]]]:
+    ) -> Tuple[Dict[str, np.ndarray], List[Dict[str, Any]]]:  # pytype: disable=signature-mismatch
         """
         Adds the observations to the stack and uses the dones to update the infos.
 

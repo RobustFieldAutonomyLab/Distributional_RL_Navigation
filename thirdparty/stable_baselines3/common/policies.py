@@ -5,7 +5,7 @@ import copy
 import warnings
 from abc import ABC, abstractmethod
 from functools import partial
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 import gym
 import numpy as np
@@ -28,15 +28,15 @@ from stable_baselines3.common.torch_layers import (
     FlattenExtractor,
     MlpExtractor,
     NatureCNN,
-    ##### local modification #####
-    CarleCNN,
     create_mlp,
 )
 from stable_baselines3.common.type_aliases import Schedule
 from stable_baselines3.common.utils import get_device, is_vectorized_observation, obs_as_tensor
 
+BaseModelSelf = TypeVar("BaseModelSelf", bound="BaseModel")
 
-class BaseModel(nn.Module, ABC):
+
+class BaseModel(nn.Module):
     """
     The base model object: makes predictions in response to observations.
 
@@ -69,7 +69,7 @@ class BaseModel(nn.Module, ABC):
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
     ):
-        super(BaseModel, self).__init__()
+        super().__init__()
 
         if optimizer_kwargs is None:
             optimizer_kwargs = {}
@@ -88,10 +88,6 @@ class BaseModel(nn.Module, ABC):
 
         self.features_extractor_class = features_extractor_class
         self.features_extractor_kwargs = features_extractor_kwargs
-
-    @abstractmethod
-    def forward(self, *args, **kwargs):
-        pass
 
     def _update_features_extractor(
         self,
@@ -164,7 +160,7 @@ class BaseModel(nn.Module, ABC):
         th.save({"state_dict": self.state_dict(), "data": self._get_constructor_parameters()}, path)
 
     @classmethod
-    def load(cls, path: str, device: Union[th.device, str] = "auto") -> "BaseModel":
+    def load(cls: Type[BaseModelSelf], path: str, device: Union[th.device, str] = "auto") -> BaseModelSelf:
         """
         Load model from path.
 
@@ -257,7 +253,7 @@ class BaseModel(nn.Module, ABC):
         return observation, vectorized_env
 
 
-class BasePolicy(BaseModel):
+class BasePolicy(BaseModel, ABC):
     """The base policy object.
 
     Parameters are mostly the same as `BaseModel`; additions are documented below.
@@ -269,7 +265,7 @@ class BasePolicy(BaseModel):
     """
 
     def __init__(self, *args, squash_output: bool = False, **kwargs):
-        super(BasePolicy, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._squash_output = squash_output
 
     @staticmethod
@@ -309,26 +305,28 @@ class BasePolicy(BaseModel):
     def predict(
         self,
         observation: Union[np.ndarray, Dict[str, np.ndarray]],
-        state: Optional[np.ndarray] = None,
-        mask: Optional[np.ndarray] = None,
+        state: Optional[Tuple[np.ndarray, ...]] = None,
+        episode_start: Optional[np.ndarray] = None,
         deterministic: bool = False,
-    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    ) -> Tuple[np.ndarray, Optional[Tuple[np.ndarray, ...]]]:
         """
-        Get the policy action and state from an observation (and optional state).
+        Get the policy action from an observation (and optional hidden state).
         Includes sugar-coating to handle different observations (e.g. normalizing images).
 
         :param observation: the input observation
-        :param state: The last states (can be None, used in recurrent policies)
-        :param mask: The last masks (can be None, used in recurrent policies)
+        :param state: The last hidden states (can be None, used in recurrent policies)
+        :param episode_start: The last masks (can be None, used in recurrent policies)
+            this correspond to beginning of episodes,
+            where the hidden states of the RNN must be reset.
         :param deterministic: Whether or not to return deterministic actions.
-        :return: the model's action and the next state
+        :return: the model's action and the next hidden state
             (used in recurrent policies)
         """
         # TODO (GH/1): add support for RNN policies
         # if state is None:
         #     state = self.initial_state
-        # if mask is None:
-        #     mask = [False for _ in range(self.n_envs)]
+        # if episode_start is None:
+        #     episode_start = [False for _ in range(self.n_envs)]
         # Switch to eval mode (this affects batch norm / dropout)
         self.set_training_mode(False)
 
@@ -336,8 +334,8 @@ class BasePolicy(BaseModel):
 
         with th.no_grad():
             actions = self._predict(observation, deterministic=deterministic)
-        # Convert to numpy
-        actions = actions.cpu().numpy()
+        # Convert to numpy, and reshape to the original action shape
+        actions = actions.cpu().numpy().reshape((-1,) + self.action_space.shape)
 
         if isinstance(self.action_space, gym.spaces.Box):
             if self.squash_output:
@@ -350,7 +348,7 @@ class BasePolicy(BaseModel):
 
         # Remove batch dimension if needed
         if not vectorized_env:
-            actions = actions[0]
+            actions = actions.squeeze(axis=0)
 
         return actions, state
 
@@ -437,7 +435,7 @@ class ActorCriticPolicy(BasePolicy):
             if optimizer_class == th.optim.Adam:
                 optimizer_kwargs["eps"] = 1e-5
 
-        super(ActorCriticPolicy, self).__init__(
+        super().__init__(
             observation_space,
             action_space,
             features_extractor_class,
@@ -449,9 +447,8 @@ class ActorCriticPolicy(BasePolicy):
 
         # Default network architecture, from stable-baselines
         if net_arch is None:
-            ##### local modification #####
-            if features_extractor_class == CarleCNN:
-                net_arch = [64,64]
+            if features_extractor_class == NatureCNN:
+                net_arch = []
             else:
                 net_arch = [dict(pi=[64, 64], vf=[64, 64])]
 
@@ -593,6 +590,7 @@ class ActorCriticPolicy(BasePolicy):
         distribution = self._get_action_dist_from_latent(latent_pi)
         actions = distribution.get_actions(deterministic=deterministic)
         log_prob = distribution.log_prob(actions)
+        actions = actions.reshape((-1,) + self.action_space.shape)
         return actions, values, log_prob
 
     def _get_action_dist_from_latent(self, latent_pi: th.Tensor) -> Distribution:
@@ -719,14 +717,13 @@ class ActorCriticCnnPolicy(ActorCriticPolicy):
         sde_net_arch: Optional[List[int]] = None,
         use_expln: bool = False,
         squash_output: bool = False,
-        ##### local modification #####
-        features_extractor_class: Type[BaseFeaturesExtractor] = CarleCNN,
+        features_extractor_class: Type[BaseFeaturesExtractor] = NatureCNN,
         features_extractor_kwargs: Optional[Dict[str, Any]] = None,
         normalize_images: bool = True,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
     ):
-        super(ActorCriticCnnPolicy, self).__init__(
+        super().__init__(
             observation_space,
             action_space,
             lr_schedule,
@@ -801,7 +798,7 @@ class MultiInputActorCriticPolicy(ActorCriticPolicy):
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
     ):
-        super(MultiInputActorCriticPolicy, self).__init__(
+        super().__init__(
             observation_space,
             action_space,
             lr_schedule,
@@ -896,68 +893,3 @@ class ContinuousCritic(BaseModel):
         with th.no_grad():
             features = self.extract_features(obs)
         return self.q_networks[0](th.cat([features, actions], dim=1))
-
-
-_policy_registry = dict()  # type: Dict[Type[BasePolicy], Dict[str, Type[BasePolicy]]]
-
-
-def get_policy_from_name(base_policy_type: Type[BasePolicy], name: str) -> Type[BasePolicy]:
-    """
-    Returns the registered policy from the base type and name.
-    See `register_policy` for registering policies and explanation.
-
-    :param base_policy_type: the base policy class
-    :param name: the policy name
-    :return: the policy
-    """
-    if base_policy_type not in _policy_registry:
-        raise KeyError(f"Error: the policy type {base_policy_type} is not registered!")
-    if name not in _policy_registry[base_policy_type]:
-        raise KeyError(
-            f"Error: unknown policy type {name},"
-            f"the only registed policy type are: {list(_policy_registry[base_policy_type].keys())}!"
-        )
-    return _policy_registry[base_policy_type][name]
-
-
-def register_policy(name: str, policy: Type[BasePolicy]) -> None:
-    """
-    Register a policy, so it can be called using its name.
-    e.g. SAC('MlpPolicy', ...) instead of SAC(MlpPolicy, ...).
-
-    The goal here is to standardize policy naming, e.g.
-    all algorithms can call upon "MlpPolicy" or "CnnPolicy",
-    and they receive respective policies that work for them.
-    Consider following:
-
-    OnlinePolicy
-    -- OnlineMlpPolicy ("MlpPolicy")
-    -- OnlineCnnPolicy ("CnnPolicy")
-    OfflinePolicy
-    -- OfflineMlpPolicy ("MlpPolicy")
-    -- OfflineCnnPolicy ("CnnPolicy")
-
-    Two policies have name "MlpPolicy" and two have "CnnPolicy".
-    In `get_policy_from_name`, the parent class (e.g. OnlinePolicy)
-    is given and used to select and return the correct policy.
-
-    :param name: the policy name
-    :param policy: the policy class
-    """
-    sub_class = None
-    for cls in BasePolicy.__subclasses__():
-        if issubclass(policy, cls):
-            sub_class = cls
-            break
-    if sub_class is None:
-        raise ValueError(f"Error: the policy {policy} is not of any known subclasses of BasePolicy!")
-
-    if sub_class not in _policy_registry:
-        _policy_registry[sub_class] = {}
-    if name in _policy_registry[sub_class]:
-        # Check if the registered policy is same
-        # we try to register. If not so,
-        # do not override and complain.
-        if _policy_registry[sub_class][name] != policy:
-            raise ValueError(f"Error: the name {name} is already registered for a different policy, will not override.")
-    _policy_registry[sub_class][name] = policy

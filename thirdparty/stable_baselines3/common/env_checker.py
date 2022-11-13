@@ -143,11 +143,18 @@ def _check_returned_values(env: gym.Env, observation_space: spaces.Space, action
 
     if isinstance(observation_space, spaces.Dict):
         assert isinstance(obs, dict), "The observation returned by `reset()` must be a dictionary"
+
+        if not obs.keys() == observation_space.spaces.keys():
+            raise AssertionError(
+                "The observation keys returned by `reset()` must match the observation "
+                f"space keys: {obs.keys()} != {observation_space.spaces.keys()}"
+            )
+
         for key in observation_space.spaces.keys():
             try:
                 _check_obs(obs[key], observation_space.spaces[key], "reset")
             except AssertionError as e:
-                raise AssertionError(f"Error while checking key={key}: " + str(e))
+                raise AssertionError(f"Error while checking key={key}: " + str(e)) from e
     else:
         _check_obs(obs, observation_space, "reset")
 
@@ -162,11 +169,18 @@ def _check_returned_values(env: gym.Env, observation_space: spaces.Space, action
 
     if isinstance(observation_space, spaces.Dict):
         assert isinstance(obs, dict), "The observation returned by `step()` must be a dictionary"
+
+        if not obs.keys() == observation_space.spaces.keys():
+            raise AssertionError(
+                "The observation keys returned by `step()` must match the observation "
+                f"space keys: {obs.keys()} != {observation_space.spaces.keys()}"
+            )
+
         for key in observation_space.spaces.keys():
             try:
                 _check_obs(obs[key], observation_space.spaces[key], "step")
             except AssertionError as e:
-                raise AssertionError(f"Error while checking key={key}: " + str(e))
+                raise AssertionError(f"Error while checking key={key}: " + str(e)) from e
 
     else:
         _check_obs(obs, observation_space, "step")
@@ -266,12 +280,22 @@ def check_env(env: gym.Env, warn: bool = True, skip_render_check: bool = True) -
         # Check for the action space, it may lead to hard-to-debug issues
         if isinstance(action_space, spaces.Box) and (
             np.any(np.abs(action_space.low) != np.abs(action_space.high))
-            or np.any(np.abs(action_space.low) > 1)
-            or np.any(np.abs(action_space.high) > 1)
+            or np.any(action_space.low != -1)
+            or np.any(action_space.high != 1)
         ):
             warnings.warn(
                 "We recommend you to use a symmetric and normalized Box action space (range=[-1, 1]) "
                 "cf https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html"
+            )
+
+        if isinstance(action_space, spaces.Box):
+            assert np.all(
+                np.isfinite(np.array([action_space.low, action_space.high]))
+            ), "Continuous action space must have a finite lower and upper bound"
+
+        if isinstance(action_space, spaces.Box) and action_space.dtype != np.dtype(np.float32):
+            warnings.warn(
+                f"Your action space has dtype {action_space.dtype}, we recommend using np.float32 to avoid cast errors."
             )
 
     # ============ Check the returned values ===============

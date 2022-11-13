@@ -4,14 +4,12 @@ import gym
 import torch as th
 from torch import nn
 
-from stable_baselines3.common.policies import BasePolicy, register_policy
+from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     CombinedExtractor,
     FlattenExtractor,
-    ##### local modification #####
-    #NatureCNN,
-    CarleCNN,
+    NatureCNN,
     create_mlp,
 )
 from stable_baselines3.common.type_aliases import Schedule
@@ -39,7 +37,7 @@ class QNetwork(BasePolicy):
         activation_fn: Type[nn.Module] = nn.ReLU,
         normalize_images: bool = True,
     ):
-        super(QNetwork, self).__init__(
+        super().__init__(
             observation_space,
             action_space,
             features_extractor=features_extractor,
@@ -68,7 +66,7 @@ class QNetwork(BasePolicy):
         return self.q_net(self.extract_features(obs))
 
     def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:
-        q_values = self.forward(observation)
+        q_values = self(observation)
         # Greedy action
         action = q_values.argmax(dim=1).reshape(-1)
         return action
@@ -120,7 +118,7 @@ class DQNPolicy(BasePolicy):
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
     ):
-        super(DQNPolicy, self).__init__(
+        super().__init__(
             observation_space,
             action_space,
             features_extractor_class,
@@ -130,10 +128,8 @@ class DQNPolicy(BasePolicy):
         )
 
         if net_arch is None:
-            ##### local modification #####
-            #if features_extractor_class == NatureCNN:
-            if features_extractor_class == CarleCNN:
-                net_arch = [64, 64]
+            if features_extractor_class == NatureCNN:
+                net_arch = []
             else:
                 net_arch = [64, 64]
 
@@ -237,15 +233,13 @@ class CnnPolicy(DQNPolicy):
         lr_schedule: Schedule,
         net_arch: Optional[List[int]] = None,
         activation_fn: Type[nn.Module] = nn.ReLU,
-        ##### local modification #####
-        #features_extractor_class: Type[BaseFeaturesExtractor] = NatureCNN,
-        features_extractor_class: Type[BaseFeaturesExtractor] = CarleCNN,
+        features_extractor_class: Type[BaseFeaturesExtractor] = NatureCNN,
         features_extractor_kwargs: Optional[Dict[str, Any]] = None,
         normalize_images: bool = True,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
     ):
-        super(CnnPolicy, self).__init__(
+        super().__init__(
             observation_space,
             action_space,
             lr_schedule,
@@ -290,7 +284,7 @@ class MultiInputPolicy(DQNPolicy):
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
     ):
-        super(MultiInputPolicy, self).__init__(
+        super().__init__(
             observation_space,
             action_space,
             lr_schedule,
@@ -302,8 +296,3 @@ class MultiInputPolicy(DQNPolicy):
             optimizer_class,
             optimizer_kwargs,
         )
-
-
-register_policy("MlpPolicy", MlpPolicy)
-register_policy("CnnPolicy", CnnPolicy)
-register_policy("MultiInputPolicy", MultiInputPolicy)

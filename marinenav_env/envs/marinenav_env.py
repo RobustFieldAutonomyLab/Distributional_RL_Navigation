@@ -31,10 +31,10 @@ class MarineNavEnv(gym.Env):
         self.rd = np.random.RandomState(seed) # PRNG 
 
         # Define action space and observation space for gym
-        self.action_space = gym.spaces.Discrete(np.shape(self.robot.a)[0])
+        self.action_space = gym.spaces.Discrete(np.shape(self.robot.a)[0] * np.shape(self.robot.w)[0])
         obs_len = 2 + 2 + 2 * self.robot.sonar.num_beams
-        self.observation_space = gym.spaces.Box(low = -np.inf * np.ones(obs_len),
-                                                high = np.inf * np.ones(obs_len),
+        self.observation_space = gym.spaces.Box(low = -np.inf * np.ones(obs_len), \
+                                                high = np.inf * np.ones(obs_len), \
                                                 dtype = np.float32)
         
         # parameter initialization
@@ -131,10 +131,10 @@ class MarineNavEnv(gym.Env):
 
         # reset robot state
         current_v = self.get_velocity(self.start[0],self.start[1])
-        self.robot.set_state(self.start[0],self.start[1],current_velocity=current_v)
+        self.robot.reset_state(self.start[0],self.start[1],current_velocity=current_v)
 
     def step(self, action):
-        # execute action (linear acceleration, angular velocity), update the environment, and return (obs, reward, done)
+        # execute action, update the environment, and return (obs, reward, done)
 
         # update robot state after executing the action    
         for _ in range(self.robot.N):
@@ -148,8 +148,7 @@ class MarineNavEnv(gym.Env):
         reward = self.timestep_penalty
 
         # penalize action according to magnitude (energy consumption)
-        a = self.robot.a(action[0])
-        w = self.robot.w(action[1])
+        a,w = self.robot.actions[action]
         u = np.matrix([[a],[w]])
         p = np.transpose(u) * self.energy_penalty * u
         reward += p[0,0]
@@ -486,3 +485,6 @@ class MarineNavEnv(gym.Env):
                                                 interval=100,repeat=False)
 
         plt.show(block=False)
+
+    def save_env_config(self):
+        pass

@@ -34,19 +34,6 @@ class DummyVecEnv(VecEnv):
         self.buf_infos = [{} for _ in range(self.num_envs)]
         self.actions = None
         self.metadata = env.metadata
-        
-        ##### local modification #####
-        self.discount = env.discount
-        self.num_states = env.get_num_of_states()
-        self.save_q_vals = True if env.agent == "QRDQN" else False
-
-    ##### local modification #####
-    def get_obs_at_state(self, state:int) -> np.ndarray:
-        return self.envs[0].get_obs_at_state(state)
-    
-    ##### local modification #####
-    def save_quantiles(self, quantiles:np.ndarray) -> None:
-        self.envs[0].save_quantiles(quantiles)
 
     def step_async(self, actions: np.ndarray) -> None:
         self.actions = actions
@@ -64,7 +51,9 @@ class DummyVecEnv(VecEnv):
         return (self._obs_from_buf(), np.copy(self.buf_rews), np.copy(self.buf_dones), deepcopy(self.buf_infos))
 
     def seed(self, seed: Optional[int] = None) -> List[Union[None, int]]:
-        seeds = list()
+        if seed is None:
+            seed = np.random.randint(0, 2**32 - 1)
+        seeds = []
         for idx, env in enumerate(self.envs):
             seeds.append(env.seed(seed + idx))
         return seeds

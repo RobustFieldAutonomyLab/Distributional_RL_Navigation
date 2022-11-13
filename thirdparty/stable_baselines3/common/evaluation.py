@@ -7,24 +7,6 @@ import numpy as np
 from stable_baselines3.common import base_class
 from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv, VecMonitor, is_vecenv_wrapped
 
-##### local modification #####
-def ssd_policy(quantiles:np.ndarray, use_threshold:bool=False, mean_threshold:float=1e-03):
-    means = np.mean(quantiles,axis=0)
-    sort_idx = np.argsort(-1*means)
-    best_1 = sort_idx[0]
-    best_2 = sort_idx[1]
-    if means[best_1] - means[best_2] > mean_threshold:
-        return best_1
-    else:
-        if use_threshold:
-            signed_second_moment = -1 * np.var(quantiles,axis=0)
-        else:
-            signed_second_moment = -1 * np.mean(quantiles**2,axis=0)
-        action = best_1
-        if signed_second_moment[best_2] > signed_second_moment[best_1]:
-            action = best_2
-        return action
-
 
 def evaluate_policy(
     model: "base_class.BaseAlgorithm",
@@ -36,9 +18,6 @@ def evaluate_policy(
     reward_threshold: Optional[float] = None,
     return_episode_rewards: bool = False,
     warn: bool = True,
-    ##### local modification #####
-    eval_policy: str = "Greedy",
-    ssd_thres: float = 1e-03
 ) -> Union[Tuple[float, float], Tuple[List[float], List[int]]]:
     """
     Runs policy for ``n_eval_episodes`` episodes and returns average reward.
@@ -89,18 +68,6 @@ def evaluate_policy(
             "Consider wrapping environment first with ``Monitor`` wrapper.",
             UserWarning,
         )
-    
-    ##### local modification #####
-    # store quantiles prediction for all state action pair if the agent is QR-DQN
-    if env.save_q_vals:
-        print("saving quantiles (QR-DQN)")
-        all_quantiles = []
-        for i in range(env.num_states):
-            obs = env.get_obs_at_state(i)
-            q_vals = model.predict_quantiles(obs)
-            all_quantiles.append(q_vals.cpu().data.numpy()[0])
-        
-        env.save_quantiles(np.array(all_quantiles))
 
     n_envs = env.num_envs
     episode_rewards = []
@@ -114,26 +81,11 @@ def evaluate_policy(
     current_lengths = np.zeros(n_envs, dtype="int")
     observations = env.reset()
     states = None
+    episode_starts = np.ones((env.num_envs,), dtype=bool)
     while (episode_counts < episode_count_targets).any():
-        ##### local modification #####
-        if eval_policy == "Greedy":
-            actions, states = model.predict(observations, state=states, deterministic=deterministic)
-        # TODO: consider multi environments case
-        elif eval_policy == "SSD":
-            q_vals = model.predict_quantiles(observations)
-            actions = np.array([ssd_policy(q_vals.cpu().data.numpy()[0])])
-            states = None
-        elif eval_policy == "Thresholded_SSD":
-            q_vals = model.predict_quantiles(observations)
-            actions = np.array([ssd_policy(q_vals.cpu().data.numpy()[0],use_threshold=True,mean_threshold=ssd_thres)])
-            states = None
-        else:
-            raise RuntimeError("The evaluation policy is not available.")
-        
+        actions, states = model.predict(observations, state=states, episode_start=episode_starts, deterministic=deterministic)
         observations, rewards, dones, infos = env.step(actions)
-        ##### local modification #####
-        #current_rewards += rewards
-        current_rewards += env.discount ** current_lengths[0] * rewards
+        current_rewards += rewards
         current_lengths += 1
         for i in range(n_envs):
             if episode_counts[i] < episode_count_targets[i]:
@@ -142,39 +94,30 @@ def evaluate_policy(
                 reward = rewards[i]
                 done = dones[i]
                 info = infos[i]
+                episode_starts[i] = done
 
                 if callback is not None:
                     callback(locals(), globals())
 
-                ##### local modification #####
-                # if dones[i]:
-                if dones[i] or current_lengths[i] >= 1000:
-                    print("Eval_steps: ",current_lengths[i]," Eval_return: ",current_rewards[i])
-                    # if is_monitor_wrapped:
-                    #     # Atari wrapper can send a "done" signal when
-                    #     # the agent loses a life, but it does not correspond
-                    #     # to the true end of episode
-                    #     if "episode" in info.keys():
-                    #         # Do not trust "done" with episode endings.
-                    #         # Monitor wrapper includes "episode" key in info if environment
-                    #         # has been wrapped with it. Use those rewards instead.
-                    #         episode_rewards.append(info["episode"]["r"])
-                    #         episode_lengths.append(info["episode"]["l"])
-                    #         # Only increment at the real end of an episode
-                    #         episode_counts[i] += 1
-                    # else:
-                    #     episode_rewards.append(current_rewards[i])
-                    #     episode_lengths.append(current_lengths[i])
-                    #     episode_counts[i] += 1
-
-                    episode_rewards.append(current_rewards[i])
-                    episode_lengths.append(current_lengths[i])
-                    episode_counts[i] += 1
-
+                if dones[i]:
+                    if is_monitor_wrapped:
+                        # Atari wrapper can send a "done" signal when
+                        # the agent loses a life, but it does not correspond
+                        # to the true end of episode
+                        if "episode" in info.keys():
+                            # Do not trust "done" with episode endings.
+                            # Monitor wrapper includes "episode" key in info if environment
+                            # has been wrapped with it. Use those rewards instead.
+                            episode_rewards.append(info["episode"]["r"])
+                            episode_lengths.append(info["episode"]["l"])
+                            # Only increment at the real end of an episode
+                            episode_counts[i] += 1
+                    else:
+                        episode_rewards.append(current_rewards[i])
+                        episode_lengths.append(current_lengths[i])
+                        episode_counts[i] += 1
                     current_rewards[i] = 0
                     current_lengths[i] = 0
-                    if states is not None:
-                        states[i] *= 0
 
         if render:
             env.render()
