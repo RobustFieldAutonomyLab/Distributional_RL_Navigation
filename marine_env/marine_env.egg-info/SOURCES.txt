@@ -1,6 +1,0 @@
-setup.py
-marine_env.egg-info/PKG-INFO
-marine_env.egg-info/SOURCES.txt
-marine_env.egg-info/dependency_links.txt
-marine_env.egg-info/requires.txt
-marine_env.egg-info/top_level.txt

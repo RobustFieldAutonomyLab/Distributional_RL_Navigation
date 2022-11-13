@@ -3,7 +3,7 @@ import numpy as np
 import scipy.spatial
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import marine_env.envs.utils.robot as robot
+import marinenav_env.envs.utils.robot as robot
 import gym
 
 class Core:
@@ -23,7 +23,7 @@ class Obstacle:
         self.y = y # y coordinate of the obstacle center
         self.r = r # radius of the obstacle    
 
-class Env(gym.Env):
+class MarineNavEnv(gym.Env):
 
     def __init__(self, seed:int=0):
 
