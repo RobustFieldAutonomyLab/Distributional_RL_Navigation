@@ -25,6 +25,7 @@ class Robot:
         self.sonar = Sonar()
         self.length = 1.0 
         self.width = 0.5
+        self.r = 0.8 # collision distance   
         self.max_speed = 2.0
         self.a = np.array([-0.4,0.0,0.4]) # action[0]: linear accelerations (m/s^2)
         self.w = np.array([-np.pi/6,0.0,np.pi/6]) # action[1]: angular velocities (rad/s)
@@ -35,6 +36,12 @@ class Robot:
         self.theta = None # steering heading angle
         self.speed = None # steering foward speed
         self.velocity = None # velocity wrt sea floor
+
+    def compute_penalty_matrix(self):
+        scale_a = 1 / (np.max(self.a)*np.max(self.a))
+        scale_w = 1 / (np.max(self.w)*np.max(self.w))
+        p = -1.0 * np.matrix([[scale_a,0.0],[0.0,scale_w]])
+        return p
 
     def set_state(self,x,y,theta=0.0,speed=0.0,current_velocity=np.zeros(2)):
         self.x = x

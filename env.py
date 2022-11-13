@@ -4,6 +4,7 @@ import scipy.spatial
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import robot
+import gym
 
 class Core:
 
@@ -22,11 +23,12 @@ class Obstacle:
         self.y = y # y coordinate of the obstacle center
         self.r = r # radius of the obstacle    
 
-class Env:
+class Env(gym.Env):
 
     def __init__(self, seed:int=0):
         
         # parameter initialization
+        self.robot = robot.Robot()
         self.rd = np.random.RandomState(seed) # PRNG 
         self.width = 50 # x coordinate dimension of the map
         self.height = 50 # y coordinate dimension of the map
@@ -38,15 +40,16 @@ class Env:
         self.clear_r = 5 # radius of area centered at start and goal where no vortex cores or obstacles exist
         self.start = np.array([5.0,5.0]) # robot start position
         self.goal = np.array([45.0,45.0]) # goal position
+        self.goal_dis = 2.0 # max distance to goal considered as reached
         self.timestep_penalty = -1.0
-        self.energy_penalty = -1.0
+        self.energy_penalty = self.robot.compute_penalty_matrix()
         self.collision_penalty = -50.0
         self.goal_reward = 100.0
+        self.num_cores = 8
+        self.num_obs = 5
 
         self.cores = [] # vortex cores
         self.obstacles = [] # cylinder obstacles
-
-        self.robot = robot.Robot()
 
         # visualization
         self.fig = None # figure for visualization
@@ -59,11 +62,14 @@ class Env:
 
         self.reset()
 
-    def reset(self, num_cores:int = 8, num_obs:int = 5):
+    def reset(self):
         # reset the environment
         
         self.cores.clear()
         self.obstacles.clear()
+
+        num_cores = self.num_cores
+        num_obs = self.num_obs
 
         # generate vortex with random position, spinning direction and strength
         iteration = 500
@@ -104,6 +110,17 @@ class Env:
             if iteration == 0 or num_obs == 0:
                 break
 
+        centers = None
+        for obs in self.obstacles:
+            if centers is None:
+                centers = np.array([[obs.x,obs.y]])
+            else:
+                c = np.array([[obs.x,obs.y]])
+                centers = np.vstack((centers,c))
+        
+        # KDTree storing obstacle center positions
+        self.obs_centers = scipy.spatial.KDTree(centers)
+
         # reset robot state
         current_v = self.get_velocity(self.start[0],self.start[1])
         self.robot.set_state(self.start[0],self.start[1],current_velocity=current_v)
@@ -115,10 +132,35 @@ class Env:
         for _ in range(self.robot.N):
             current_velocity = self.get_velocity(self.robot.x, self.robot.y)
             self.robot.update_state(action,current_velocity)
+        
+        # get observation 
+        obs = self.get_observation()
 
-        # return obs, reward, done, info
+        # constant penalty applied at every time step
+        reward = self.timestep_penalty
 
-    def get_observation(self):
+        # penalize action according to magnitude (energy consumption)
+        a = self.robot.a(action[0])
+        w = self.robot.w(action[1])
+        u = np.matrix([[a],[w]])
+        p = np.transpose(u) * self.energy_penalty * u
+        reward += p[0,0]
+
+        if self.check_collision():
+            reward += self.collision_penalty
+            done = True
+            info = "collision"
+        elif self.check_reach_goal():
+            reward += self.goal_reward
+            done = True
+            info = "reach goal"
+        else:
+            done = False
+            info = "normal"
+
+        return obs, reward, done, info
+
+    def get_observation(self, for_plotting=False):
 
         # generate observation (1.vehicle velocity wrt seafloor in robot frame by DVL, 
         #                       2.obstacle reflection point clouds in robot frame by Sonar,
@@ -131,25 +173,57 @@ class Env:
         R_rw = np.transpose(R_wr)
         t_rw = -R_rw * t_wr
 
+        # vehicle velocity wrt seafloor in robot frame
         abs_velocity_r = R_rw * np.reshape(self.robot.velocity,(2,1))
         abs_velocity_r.resize((2,))
 
-        sonar_points_r = None
-        for point in self.robot.sonar.reflections:
-            p = np.reshape(point,(3,1))
-            p[:2] = R_rw * p[:2] + t_rw
-            if sonar_points_r is None:
-                sonar_points_r = p
-            else:
-                sonar_points_r = np.hstack((sonar_points_r,p))
-
+        # goal position in robot frame
         goal_w = np.reshape(self.goal,(2,1))
         goal_r = R_rw * goal_w + t_rw
+        goal_r.resize((2,))
 
-        return abs_velocity_r, sonar_points_r, goal_r
+        # obstacle reflection point clouds in robot frame
+        if for_plotting:
+            sonar_points_r = None
+            for point in self.robot.sonar.reflections:
+                p = np.reshape(point,(3,1))
+                p[:2] = R_rw * p[:2] + t_rw
+                if sonar_points_r is None:
+                    sonar_points_r = p
+                else:
+                    sonar_points_r = np.hstack((sonar_points_r,p))
 
-    def get_reward(self):
-        pass
+            return abs_velocity_r, sonar_points_r, goal_r
+        else:
+            # set virtual points as (0,0), and concatenate all observations 
+            # into one vector
+            sonar_points_r = None
+            for point in self.robot.sonar.reflections:
+                p = np.reshape(point,(3,1))
+                if p[2] == 0:
+                    p_r = np.zeros(2)
+                else:
+                    p_r = R_rw * p[:2] + t_rw
+                    p_r.resize((2,))
+                if sonar_points_r is None:
+                    sonar_points_r = p
+                else:
+                    sonar_points_r = np.hstack((sonar_points_r,p))
+
+            return np.hstack((abs_velocity_r,goal_r,sonar_points_r))
+
+
+    def check_collision(self):
+        d, idx = self.obs_centers.query(np.array([self.robot.x,self.robot.y]))
+        if d <= self.obstacles[idx].r + self.robot.r:
+            return True
+        return False
+
+    def check_reach_goal(self):
+        dis = np.array([self.robot.x,self.robot.y]) - self.goal
+        if np.linalg.norm(dis) <= self.goal_dis:
+            return True
+        return False
     
     def check_core(self,core_j):
 
@@ -330,7 +404,7 @@ class Env:
             plot[0].remove()
         self.sonar_sec.clear()
         
-        abs_velocity_r, sonar_points_r, goal_r = self.get_observation()
+        abs_velocity_r, sonar_points_r, goal_r = self.get_observation(for_plotting=True)
         
         # plot Sonar beams in the world frame
         for point in self.robot.sonar.reflections:
