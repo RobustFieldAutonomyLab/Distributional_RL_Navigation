@@ -3,7 +3,7 @@ import numpy as np
 import scipy.spatial
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import robot
+import marine_env.envs.utils.robot as robot
 import gym
 
 class Core:
@@ -26,10 +26,18 @@ class Obstacle:
 class Env(gym.Env):
 
     def __init__(self, seed:int=0):
-        
-        # parameter initialization
+
         self.robot = robot.Robot()
         self.rd = np.random.RandomState(seed) # PRNG 
+
+        # Define action space and observation space for gym
+        self.action_space = gym.spaces.Discrete(np.shape(self.robot.a)[0])
+        obs_len = 2 + 2 + 2 * self.robot.sonar.num_beams
+        self.observation_space = gym.spaces.Box(low = -np.inf * np.ones(obs_len),
+                                                high = np.inf * np.ones(obs_len),
+                                                dtype = np.float32)
+        
+        # parameter initialization
         self.width = 50 # x coordinate dimension of the map
         self.height = 50 # y coordinate dimension of the map
         self.r = 0.5  # radius of vortex core
@@ -149,14 +157,14 @@ class Env(gym.Env):
         if self.check_collision():
             reward += self.collision_penalty
             done = True
-            info = "collision"
+            info = {"collision"}
         elif self.check_reach_goal():
             reward += self.goal_reward
             done = True
-            info = "reach goal"
+            info = {"reach goal"}
         else:
             done = False
-            info = "normal"
+            info = {"normal"}
 
         return obs, reward, done, info
 

@@ -1,16 +1,14 @@
 import numpy as np
-import env
+import sys
+sys.path.insert(0,"./thirdparty")
+from stable_baselines3 import PPO
+from stable_baselines3 import A2C
+from stable_baselines3 import DQN
+import gym
 
 if __name__ == "__main__":
-    # core_1 = current_model.Core(25,75,True,10)
-    # core_2 = current_model.Core(75,75,False,20)
-    # core_3 = current_model.Core(50,50,True,40)
-    # core_4 = current_model.Core(25,25,False,15)
-    # core_5 = current_model.Core(75,25,True,5)
+    
+    map = gym.make('marine_env:marine_env-v0')
 
-    # map = current_model.Map([core_1,core_2,core_3,core_4,core_5])
-    map = env.Env()
-    # current_v = map.get_velocity(30.0,20.0)
-    # map.robot.set_state(30.0,20.0,np.pi/6,current_velocity=current_v)
     map.init_visualize()
     map.visualize_control([1,1])

@@ -1,0 +1,2 @@
+modified:   stable_baselines3/common/evaluation.py
+            stable_baselines3/common/vec_env/dummy_vec_env.py
