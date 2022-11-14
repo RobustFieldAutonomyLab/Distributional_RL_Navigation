@@ -15,4 +15,4 @@ if __name__ == "__main__":
     map = gym.make('marinenav_env:marinenav_env-v0')
 
     map.init_visualize()
-    map.visualize_control([1,1])
+    map.visualize_control(1)

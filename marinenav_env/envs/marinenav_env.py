@@ -5,6 +5,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import marinenav_env.envs.utils.robot as robot
 import gym
+import json
 
 class Core:
 
@@ -135,6 +136,9 @@ class MarineNavEnv(gym.Env):
 
     def step(self, action):
         # execute action, update the environment, and return (obs, reward, done)
+
+        # save action to history
+        self.robot.action_history.append(action)
 
         # update robot state after executing the action    
         for _ in range(self.robot.N):
@@ -476,6 +480,9 @@ class MarineNavEnv(gym.Env):
         self.plot_measurements()
 
     def visualize_control(self,action):
+        # save action to history
+        self.robot.action_history.append(action)
+
         # update robot state and make animation when executing the action    
         actions = []
         for _ in range(self.robot.N-1):
@@ -486,5 +493,64 @@ class MarineNavEnv(gym.Env):
 
         plt.show(block=False)
 
-    def save_env_config(self):
-        pass
+    def save_episode(self,filename):
+        episode = {}
+
+        # save environment config
+        episode["env"] = {}
+        episode["env"]["width"] = self.width
+        episode["env"]["height"] = self.height
+        episode["env"]["r"] = self.r
+        episode["env"]["v_rel_max"] = self.v_rel_max
+        episode["env"]["p"] = self.p
+        episode["env"]["v_range"] = self.v_range
+        episode["env"]["obs_r_range"] = self.obs_r_range
+        episode["env"]["clear_r"] = self.clear_r
+        episode["env"]["start"] = list(self.start)
+        episode["env"]["goal"] = list(self.goal)
+        episode["env"]["goal_dis"] = self.goal_dis
+        episode["env"]["timestep_penalty"] = self.timestep_penalty
+        episode["env"]["energy_penalty"] = self.energy_penalty.tolist()
+        episode["env"]["collision_penalty"] = self.collision_penalty
+        episode["env"]["goal_reward"] = self.goal_reward
+
+        # save vortex cores information
+        episode["env"]["cores"] = {}
+        episode["env"]["cores"]["positions"] = []
+        episode["env"]["cores"]["clockwise"] = []
+        episode["env"]["cores"]["Gamma"] = []
+        for core in self.cores:
+            episode["env"]["cores"]["positions"].append([core.x,core.y])
+            episode["env"]["cores"]["clockwise"].append(core.clockwise)
+            episode["env"]["cores"]["Gamma"].append(core.Gamma)
+
+        # save obstacles information
+        episode["env"]["obstacles"] = {}
+        episode["env"]["obstacles"]["positions"] = []
+        episode["env"]["obstacles"]["r"] = []
+        for obs in self.obstacles:
+            episode["env"]["obstacles"]["positions"].append([obs.x,obs.y])
+            episode["env"]["obstacles"]["r"].append(obs.r)
+
+        # save robot config
+        episode["robot"] = {}
+        episode["robot"]["dt"] = self.robot.dt
+        episode["robot"]["N"] = self.robot.N
+        episode["robot"]["length"] = self.robot.length
+        episode["robot"]["width"] = self.robot.width
+        episode["robot"]["r"] = self.robot.r
+        episode["robot"]["max_speed"] = self.robot.max_speed
+        episode["robot"]["a"] = list(self.robot.a)
+        episode["robot"]["w"] = list(self.robot.w)
+
+        # save sonar config
+        episode["robot"]["sonar"] = {}
+        episode["robot"]["sonar"]["range"] = self.robot.sonar.range
+        episode["robot"]["sonar"]["angle"] = self.robot.sonar.angle
+        episode["robot"]["sonar"]["num_beams"] = self.robot.sonar.num_beams
+
+        # save action history
+        episode["robot"]["action_history"] = self.robot.action_history
+
+        with open(filename,"w") as file:
+            json.dump(episode,file)

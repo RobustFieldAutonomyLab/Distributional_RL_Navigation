@@ -4,8 +4,8 @@ class Sonar:
 
     def __init__(self):
         # 2D model with detection area as a sector
-        self.range = 10.0 # meter
-        self.angle = 2 * np.pi / 3
+        self.range = 10.0 # range of beams (meter)
+        self.angle = 2 * np.pi / 3 # detection angle range
         self.num_beams = 11 # number of beams (asssume each is a line)
         self.phi = self.angle / (self.num_beams-1) # interval angle between two beams
         self.beam_angles = [] # relative angles to the center
@@ -38,7 +38,7 @@ class Robot:
         self.speed = None # steering foward speed
         self.velocity = None # velocity wrt sea floor
 
-        self.a_history = [] # history of action commands in one episode
+        self.action_history = [] # history of action commands in one episode
 
     def compute_penalty_matrix(self):
         scale_a = 1 / (np.max(self.a)*np.max(self.a))
@@ -48,7 +48,7 @@ class Robot:
 
     def reset_state(self,x,y,theta=0.0,speed=0.0,current_velocity=np.zeros(2)):
         # only called when resetting the environment
-        self.a_history.clear()
+        self.action_history.clear()
         self.x = x
         self.y = y
         self.theta = theta 
