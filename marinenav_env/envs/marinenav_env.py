@@ -29,6 +29,7 @@ class MarineNavEnv(gym.Env):
     def __init__(self, seed:int=0):
 
         self.robot = robot.Robot()
+        self.sd = seed
         self.rd = np.random.RandomState(seed) # PRNG 
 
         # Define action space and observation space for gym
@@ -54,6 +55,7 @@ class MarineNavEnv(gym.Env):
         self.energy_penalty = self.robot.compute_penalty_matrix()
         self.collision_penalty = -50.0
         self.goal_reward = 100.0
+        self.discount = 0.99
         self.num_cores = 8
         self.num_obs = 5
 
@@ -68,8 +70,6 @@ class MarineNavEnv(gym.Env):
         self.sonar_sec = []
         self.axis_sonar = None # sub figure for Sonar measurement
         self.axis_dvl = None # sub figure for DVL measurement
-
-        self.reset()
 
     def reset(self):
         # reset the environment
@@ -134,6 +134,8 @@ class MarineNavEnv(gym.Env):
         current_v = self.get_velocity(self.start[0],self.start[1])
         self.robot.reset_state(self.start[0],self.start[1],current_velocity=current_v)
 
+        return self.get_observation()
+
     def step(self, action):
         # execute action, update the environment, and return (obs, reward, done)
 
@@ -160,14 +162,14 @@ class MarineNavEnv(gym.Env):
         if self.check_collision():
             reward += self.collision_penalty
             done = True
-            info = {"collision"}
+            info = {"state":"collision"}
         elif self.check_reach_goal():
             reward += self.goal_reward
             done = True
-            info = {"reach goal"}
+            info = {"state":"reach goal"}
         else:
             done = False
-            info = {"normal"}
+            info = {"state":"normal"}
 
         return obs, reward, done, info
 
@@ -187,11 +189,13 @@ class MarineNavEnv(gym.Env):
         # vehicle velocity wrt seafloor in robot frame
         abs_velocity_r = R_rw * np.reshape(self.robot.velocity,(2,1))
         abs_velocity_r.resize((2,))
+        abs_velocity_r = np.array(abs_velocity_r)
 
         # goal position in robot frame
         goal_w = np.reshape(self.goal,(2,1))
         goal_r = R_rw * goal_w + t_rw
         goal_r.resize((2,))
+        goal_r = np.array(goal_r)
 
         # obstacle reflection point clouds in robot frame
         if for_plotting:
@@ -216,10 +220,11 @@ class MarineNavEnv(gym.Env):
                 else:
                     p_r = R_rw * p[:2] + t_rw
                     p_r.resize((2,))
+                    p_r = np.array(p_r)
                 if sonar_points_r is None:
-                    sonar_points_r = p
+                    sonar_points_r = p_r
                 else:
-                    sonar_points_r = np.hstack((sonar_points_r,p))
+                    sonar_points_r = np.hstack((sonar_points_r,p_r))
 
             return np.hstack((abs_velocity_r,goal_r,sonar_points_r))
 
@@ -493,11 +498,12 @@ class MarineNavEnv(gym.Env):
 
         plt.show(block=False)
 
-    def save_episode(self,filename):
+    def episode_data(self):
         episode = {}
 
         # save environment config
         episode["env"] = {}
+        episode["env"]["seed"] = self.sd
         episode["env"]["width"] = self.width
         episode["env"]["height"] = self.height
         episode["env"]["r"] = self.r
@@ -513,6 +519,7 @@ class MarineNavEnv(gym.Env):
         episode["env"]["energy_penalty"] = self.energy_penalty.tolist()
         episode["env"]["collision_penalty"] = self.collision_penalty
         episode["env"]["goal_reward"] = self.goal_reward
+        episode["env"]["discount"] = self.discount
 
         # save vortex cores information
         episode["env"]["cores"] = {}
@@ -552,5 +559,9 @@ class MarineNavEnv(gym.Env):
         # save action history
         episode["robot"]["action_history"] = self.robot.action_history
 
+        return episode
+
+    def save_episode(self,filename):
+        episode = self.episode_data()
         with open(filename,"w") as file:
             json.dump(episode,file)

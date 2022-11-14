@@ -35,6 +35,13 @@ class DummyVecEnv(VecEnv):
         self.actions = None
         self.metadata = env.metadata
 
+        ##### modification #####
+        self.discount = env.discount
+
+    ##### modification #####
+    def episode_data(self):
+        return self.envs[0].episode_data()
+
     def step_async(self, actions: np.ndarray) -> None:
         self.actions = actions
 

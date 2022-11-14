@@ -389,6 +389,10 @@ class EvalCallback(EventCallback):
         self.evaluations_results = []
         self.evaluations_timesteps = []
         self.evaluations_length = []
+
+        ##### modification #####
+        self.evaluations_data = []
+
         # For computing success rate
         self._is_success_buffer = []
         self.evaluations_successes = []
@@ -444,7 +448,8 @@ class EvalCallback(EventCallback):
             # Reset success rate buffer
             self._is_success_buffer = []
 
-            episode_rewards, episode_lengths = evaluate_policy(
+            ##### modification #####
+            episode_rewards, episode_lengths, episode_data = evaluate_policy(
                 self.model,
                 self.eval_env,
                 n_eval_episodes=self.n_eval_episodes,
@@ -459,6 +464,8 @@ class EvalCallback(EventCallback):
                 self.evaluations_timesteps.append(self.num_timesteps)
                 self.evaluations_results.append(episode_rewards)
                 self.evaluations_length.append(episode_lengths)
+                ##### modification #####
+                self.evaluations_data.append(episode_data)
 
                 kwargs = {}
                 # Save success log if present
@@ -471,6 +478,8 @@ class EvalCallback(EventCallback):
                     timesteps=self.evaluations_timesteps,
                     results=self.evaluations_results,
                     ep_lengths=self.evaluations_length,
+                    ##### modification #####
+                    episode_data=self.evaluations_data,
                     **kwargs,
                 )
 
