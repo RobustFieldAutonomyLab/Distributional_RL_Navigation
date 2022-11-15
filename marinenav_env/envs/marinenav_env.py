@@ -1,11 +1,9 @@
-from matplotlib.animation import Animation
 import numpy as np
 import scipy.spatial
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 import marinenav_env.envs.utils.robot as robot
 import gym
 import json
+import copy
 
 class Core:
 
@@ -33,7 +31,7 @@ class MarineNavEnv(gym.Env):
         self.rd = np.random.RandomState(seed) # PRNG 
 
         # Define action space and observation space for gym
-        self.action_space = gym.spaces.Discrete(np.shape(self.robot.a)[0] * np.shape(self.robot.w)[0])
+        self.action_space = gym.spaces.Discrete(self.robot.compute_actions_dimension())
         obs_len = 2 + 2 + 2 * self.robot.sonar.num_beams
         self.observation_space = gym.spaces.Box(low = -np.inf * np.ones(obs_len), \
                                                 high = np.inf * np.ones(obs_len), \
@@ -61,15 +59,6 @@ class MarineNavEnv(gym.Env):
 
         self.cores = [] # vortex cores
         self.obstacles = [] # cylinder obstacles
-
-        # visualization
-        self.fig = None # figure for visualization
-        self.axis_graph = None # sub figure for the map
-        self.robot_sec = None
-        self.robot_last_pos = None
-        self.sonar_sec = []
-        self.axis_sonar = None # sub figure for Sonar measurement
-        self.axis_dvl = None # sub figure for DVL measurement
 
     def reset(self):
         # reset the environment
@@ -131,10 +120,14 @@ class MarineNavEnv(gym.Env):
         self.obs_centers = scipy.spatial.KDTree(centers)
 
         # reset robot state
-        current_v = self.get_velocity(self.start[0],self.start[1])
-        self.robot.reset_state(self.start[0],self.start[1],current_velocity=current_v)
+        self.reset_robot()
 
         return self.get_observation()
+
+    def reset_robot(self):
+        # reset robot state
+        current_v = self.get_velocity(self.start[0],self.start[1])
+        self.robot.reset_state(self.start[0],self.start[1],current_velocity=current_v)
 
     def step(self, action):
         # execute action, update the environment, and return (obs, reward, done)
@@ -173,7 +166,7 @@ class MarineNavEnv(gym.Env):
 
         return obs, reward, done, info
 
-    def get_observation(self, for_plotting=False):
+    def get_observation(self, for_visualize=False):
 
         # generate observation (1.vehicle velocity wrt seafloor in robot frame by DVL, 
         #                       2.obstacle reflection point clouds in robot frame by Sonar,
@@ -198,7 +191,7 @@ class MarineNavEnv(gym.Env):
         goal_r = np.array(goal_r)
 
         # obstacle reflection point clouds in robot frame
-        if for_plotting:
+        if for_visualize:
             sonar_points_r = None
             for point in self.robot.sonar.reflections:
                 p = np.reshape(point,(3,1))
@@ -355,149 +348,6 @@ class MarineNavEnv(gym.Env):
         else:
             return Gamma / (2*np.pi*d)          
 
-    def init_visualize(self):
-        self.robot_last_pos = None
-
-        x_pos = list(np.linspace(0,self.width,100))
-        y_pos = list(np.linspace(0,self.height,100))
-
-        pos_x = []
-        pos_y = []
-        arrow_x = []
-        arrow_y = []
-        for x in x_pos:
-            for y in y_pos:
-                v = self.get_velocity(x,y)
-                pos_x.append(x)
-                pos_y.append(y)
-                arrow_x.append(v[0])
-                arrow_y.append(v[1])
-        
-        # initialize subplot for the map, robot state and sensor measurments
-        self.fig = plt.figure(figsize=(24,16))
-        spec = self.fig.add_gridspec(2,3)
-        self.axis_graph = self.fig.add_subplot(spec[:,:2])
-        self.axis_sonar = self.fig.add_subplot(spec[0,2])
-        self.axis_dvl = self.fig.add_subplot(spec[1,2])
-        
-        # plot current velocity in the map
-        self.axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y)
-
-        # plot obstacles in the map
-        for obs in self.obstacles:
-            self.axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
-
-        self.axis_graph.set_aspect('equal')
-        self.axis_graph.set_xlim([0.0,self.width])
-        self.axis_graph.set_ylim([0.0,self.height])
-    
-    def plot_robot(self):
-        if self.robot_sec != None:
-            self.robot_sec.remove()
-
-        d = np.matrix([[0.5*self.robot.length],[0.5*self.robot.width]])
-        rot = np.matrix([[np.cos(self.robot.theta),-np.sin(self.robot.theta)], \
-                         [np.sin(self.robot.theta),np.cos(self.robot.theta)]])
-        d_r = rot * d
-        xy = (self.robot.x-d_r[0,0],self.robot.y-d_r[1,0])
-
-        angle_d = self.robot.theta / np.pi * 180
-        self.robot_sec = self.axis_graph.add_patch(mpl.patches.Rectangle(xy,self.robot.length, \
-                                                   self.robot.width,     \
-                                                   color='g',angle=angle_d,zorder=6))
-
-        if self.robot_last_pos != None:
-            self.axis_graph.plot((self.robot_last_pos[0],self.robot.x),
-                                 (self.robot_last_pos[1],self.robot.y),
-                                 color='m')
-        
-        self.robot_last_pos = [self.robot.x, self.robot.y]
-
-    def plot_measurements(self):
-        self.axis_sonar.clear()
-        self.axis_dvl.clear()
-        for plot in self.sonar_sec:
-            plot[0].remove()
-        self.sonar_sec.clear()
-        
-        abs_velocity_r, sonar_points_r, goal_r = self.get_observation(for_plotting=True)
-        
-        # plot Sonar beams in the world frame
-        for point in self.robot.sonar.reflections:
-            x = point[0]
-            y = point[1]
-            if point[-1] == 0:
-                # compute beam range end point 
-                x = self.robot.x + 0.5 * (x-self.robot.x)
-                y = self.robot.y + 0.5 * (y-self.robot.y)
-            else:
-                # mark the reflection point
-                self.sonar_sec.append(self.axis_graph.plot(x,y,'rx'))
-
-            self.sonar_sec.append(self.axis_graph.plot([self.robot.x,x],[self.robot.y,y],'r--'))
-
-        # plot Sonar reflections in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
-        low_angle = np.pi/2 + self.robot.sonar.beam_angles[0]
-        high_angle = np.pi/2 + self.robot.sonar.beam_angles[-1]
-        low_angle_d = low_angle / np.pi * 180
-        high_angle_d = high_angle / np.pi * 180
-        self.axis_sonar.add_patch(mpl.patches.Wedge((0.0,0.0),self.robot.sonar.range, \
-                                               low_angle_d,high_angle_d,color="r",alpha=0.2))
-        
-        for i in range(np.shape(sonar_points_r)[1]):
-            if sonar_points_r[2,i] == 1:
-                # rotate by 90 degree 
-                self.axis_sonar.plot(-sonar_points_r[1,i],sonar_points_r[0,i],'bx')
-
-        self.axis_sonar.set_xlim([-self.robot.sonar.range-1,self.robot.sonar.range+1])
-        self.axis_sonar.set_ylim([-1,self.robot.sonar.range+1])
-        self.axis_sonar.set_aspect('equal')
-        self.axis_sonar.set_title('Sonar measurement')
-
-        # plot robot velocity in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
-        h1 = self.axis_dvl.arrow(0.0,0.0,0.0,1.0, \
-                       color='k', \
-                       width = 0.01, \
-                       head_width = 0.06, \
-                       head_length = 0.1, \
-                       length_includes_head=True, \
-                       label='steer direction')
-        # rotate by 90 degree
-        h2 = self.axis_dvl.arrow(0.0,0.0,-abs_velocity_r[1],abs_velocity_r[0], \
-                       color='r',width=0.01, head_width = 0.06, \
-                       head_length = 0.1, length_includes_head=True, \
-                       label='velocity wrt seafloor')
-        x_range = np.max([2,np.abs(abs_velocity_r[1])])
-        y_range = np.max([2,np.abs(abs_velocity_r[0])])
-        self.axis_dvl.set_xlim([-x_range,x_range])
-        self.axis_dvl.set_ylim([-1,y_range])
-        self.axis_dvl.set_aspect('equal')
-        self.axis_dvl.legend(handles=[h1,h2])
-        self.axis_dvl.set_title('DVL measurement')
-
-    def one_step(self,action):
-        current_velocity = self.get_velocity(self.robot.x, self.robot.y)
-        self.robot.update_state(action,current_velocity)
-        # print(self.robot.x, self.robot.y, self.robot.speed, self.robot.theta, \
-        #       np.linalg.norm(current_velocity), np.linalg.norm(self.robot.velocity))
-
-        self.plot_robot()
-        self.plot_measurements()
-
-    def visualize_control(self,action):
-        # save action to history
-        self.robot.action_history.append(action)
-
-        # update robot state and make animation when executing the action    
-        actions = []
-        for _ in range(self.robot.N-1):
-            actions.append(action)
-
-        self.animation = mpl.animation.FuncAnimation(self.fig,self.one_step,actions, \
-                                                interval=100,repeat=False)
-
-        plt.show(block=False)
-
     def episode_data(self):
         episode = {}
 
@@ -509,8 +359,8 @@ class MarineNavEnv(gym.Env):
         episode["env"]["r"] = self.r
         episode["env"]["v_rel_max"] = self.v_rel_max
         episode["env"]["p"] = self.p
-        episode["env"]["v_range"] = self.v_range
-        episode["env"]["obs_r_range"] = self.obs_r_range
+        episode["env"]["v_range"] = copy.deepcopy(self.v_range) 
+        episode["env"]["obs_r_range"] = copy.deepcopy(self.obs_r_range)
         episode["env"]["clear_r"] = self.clear_r
         episode["env"]["start"] = list(self.start)
         episode["env"]["goal"] = list(self.goal)
@@ -557,7 +407,7 @@ class MarineNavEnv(gym.Env):
         episode["robot"]["sonar"]["num_beams"] = self.robot.sonar.num_beams
 
         # save action history
-        episode["robot"]["action_history"] = self.robot.action_history
+        episode["robot"]["action_history"] = copy.deepcopy(self.robot.action_history)
 
         return episode
 

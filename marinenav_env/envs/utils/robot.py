@@ -7,10 +7,15 @@ class Sonar:
         self.range = 10.0 # range of beams (meter)
         self.angle = 2 * np.pi / 3 # detection angle range
         self.num_beams = 11 # number of beams (asssume each is a line)
-        self.phi = self.angle / (self.num_beams-1) # interval angle between two beams
-        self.beam_angles = [] # relative angles to the center
+        self.compute_phi() # interval angle between two beams
+        self.compute_beam_angles() # relative angles to the center
         self.reflections = [] # reflection points and indicators
+    
+    def compute_phi(self):
+        self.phi = self.angle / (self.num_beams-1)
 
+    def compute_beam_angles(self):
+        self.beam_angles = []
         angle = -self.angle/2
         for i in range(self.num_beams):
             self.beam_angles.append(angle + i * self.phi)
@@ -29,8 +34,8 @@ class Robot:
         self.max_speed = 2.0
         self.a = np.array([-0.4,0.0,0.4]) # linear accelerations (m/s^2)
         self.w = np.array([-np.pi/6,0.0,np.pi/6]) # angular velocities (rad/s)
-        self.k = np.max(self.a)/self.max_speed # cofficient of water resistance
-        self.actions = [(acc,ang_v) for acc in self.a for ang_v in self.w] # list of actions
+        self.compute_k() # cofficient of water resistance
+        self.compute_actions() # list of actions
 
         self.x = None # x coordinate
         self.y = None # y coordinate
@@ -39,6 +44,15 @@ class Robot:
         self.velocity = None # velocity wrt sea floor
 
         self.action_history = [] # history of action commands in one episode
+
+    def compute_k(self):
+        self.k = np.max(self.a)/self.max_speed
+    
+    def compute_actions(self):
+        self.actions = [(acc,ang_v) for acc in self.a for ang_v in self.w]
+
+    def compute_actions_dimension(self):
+        return len(self.actions)
 
     def compute_penalty_matrix(self):
         scale_a = 1 / (np.max(self.a)*np.max(self.a))

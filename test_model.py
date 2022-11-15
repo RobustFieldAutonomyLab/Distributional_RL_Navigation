@@ -7,10 +7,29 @@ from stable_baselines3 import A2C
 from stable_baselines3 import DQN
 import gym
 import os
+import argparse
+
+parser = argparse.ArgumentParser(description="Run baseline experiments")
+parser.add_argument(
+    "-P",
+    "--num-procs",
+    dest="num_procs",
+    type=int,
+    default=1,
+    help="number of subprocess workers to use for trial parallelization",
+)
+parser.add_argument(
+    "-D",
+    "--device",
+    dest="device",
+    type=str,
+    default="auto",
+    help="device to run all subprocesses, could only specify 1 device in each run"
+)
 
 def run_trial():
     
-    save_dir = "experiment"
+    save_dir = "experiment_3"
     os.makedirs(save_dir)
     
     train_env = gym.make('marinenav_env:marinenav_env-v0')
@@ -33,7 +52,11 @@ def run_trial():
     evaluate_env.close()
 
 if __name__ == "__main__":
-    
-    run_trial()
+    args = parser.parse_args()
+    print("after parse")
+
+    if args.num_procs == 1:
+        print("before run")
+        run_trial()
 
     

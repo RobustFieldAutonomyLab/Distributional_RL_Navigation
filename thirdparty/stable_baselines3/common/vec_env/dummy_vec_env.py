@@ -37,10 +37,11 @@ class DummyVecEnv(VecEnv):
 
         ##### modification #####
         self.discount = env.discount
+        self.episode_data = None
 
     ##### modification #####
-    def episode_data(self):
-        return self.envs[0].episode_data()
+    def update_episode_data(self):
+        self.episode_data = deepcopy(self.envs[0].episode_data())
 
     def step_async(self, actions: np.ndarray) -> None:
         self.actions = actions
@@ -51,6 +52,8 @@ class DummyVecEnv(VecEnv):
                 self.actions[env_idx]
             )
             if self.buf_dones[env_idx]:
+                ##### modification #####
+                self.update_episode_data()
                 # save final observation where user can get it, then reset
                 self.buf_infos[env_idx]["terminal_observation"] = obs
                 obs = self.envs[env_idx].reset()

@@ -85,7 +85,6 @@ def evaluate_policy(
     while (episode_counts < episode_count_targets).any():
         actions, states = model.predict(observations, state=states, episode_start=episode_starts, deterministic=deterministic)
         observations, rewards, dones, infos = env.step(actions)
-        ##### modification #####
         # current_rewards += rewards
         current_rewards += env.discount ** current_lengths[0] * rewards
         current_lengths += 1
@@ -103,7 +102,8 @@ def evaluate_policy(
                 
                 ##### modification #####
                 if dones[i] or current_lengths[i] >= 1000:
-                    ##### modification #####
+                    if not dones[i]:
+                        env.update_episode_data()
                     print("Eval_steps: ",current_lengths[i]," Eval_return: ",current_rewards[i])
                     # if is_monitor_wrapped:
                     #     # Atari wrapper can send a "done" signal when
@@ -138,6 +138,6 @@ def evaluate_policy(
         assert mean_reward > reward_threshold, "Mean reward below threshold: " f"{mean_reward:.2f} < {reward_threshold:.2f}"
     if return_episode_rewards:
         ##### modification #####
-        return episode_rewards, episode_lengths, env.episode_data()
+        return episode_rewards, episode_lengths, env.episode_data
     ##### modification #####
-    return mean_reward, std_reward, env.episode_data()
+    return mean_reward, std_reward, env.episode_data
