@@ -147,27 +147,33 @@ class EnvVisualizer:
     def one_step(self,action):
         current_velocity = self.env.get_velocity(self.env.robot.x, self.env.robot.y)
         self.env.robot.update_state(action,current_velocity)
-        # print(self.env.robot.x, self.env.robot.y, self.env.robot.speed, self.env.robot.theta, \
-        #       np.linalg.norm(current_velocity), np.linalg.norm(self.env.robot.velocity))
 
         self.plot_robot()
         self.plot_measurements()
+    
+    def init_animation(self):
+        # plot initial robot position
+        self.plot_robot()
+
+        # plot initial DVL and Sonar measurments
+        self.plot_measurements() 
 
     def visualize_control(self,action_sequence):
-        # update robot state and make animation when executing action sequence    
+        # update robot state and make animation when executing action sequence
         actions = []
         for action in action_sequence:
-            for _ in range(self.env.robot.N-1):
+            for _ in range(self.env.robot.N):
                 actions.append(action)
 
-        self.animation = mpl.animation.FuncAnimation(self.fig,self.one_step,actions, \
-                                                interval=100,repeat=False)
+        self.animation = mpl.animation.FuncAnimation(self.fig, self.one_step,frames=actions, \
+                                                     init_func=self.init_animation,
+                                                     interval=100,repeat=False)
 
         plt.show(block=False)
 
-    def load_episode(self,filename):
+    def load_episode(self,filename,id):
         eval_file = np.load(filename,allow_pickle=True)
-        episode = copy.deepcopy(eval_file["episode_data"][0])
+        episode = copy.deepcopy(eval_file["episode_data"][id])
 
         # load env config
         self.env.sd = episode["env"]["seed"]
@@ -257,5 +263,7 @@ class EnvVisualizer:
         self.robot_traj_plot.clear()
 
         self.env.reset_robot()
+
+        self.init_visualize()
 
         self.visualize_control(self.episode_actions)

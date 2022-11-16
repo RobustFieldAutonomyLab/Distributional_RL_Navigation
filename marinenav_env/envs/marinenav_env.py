@@ -146,11 +146,11 @@ class MarineNavEnv(gym.Env):
         # constant penalty applied at every time step
         reward = self.timestep_penalty
 
-        # penalize action according to magnitude (energy consumption)
-        a,w = self.robot.actions[action]
-        u = np.matrix([[a],[w]])
-        p = np.transpose(u) * self.energy_penalty * u
-        reward += p[0,0]
+        # # penalize action according to magnitude (energy consumption)
+        # a,w = self.robot.actions[action]
+        # u = np.matrix([[a],[w]])
+        # p = np.transpose(u) * self.energy_penalty * u
+        # reward += p[0,0]
 
         if self.check_collision():
             reward += self.collision_penalty
