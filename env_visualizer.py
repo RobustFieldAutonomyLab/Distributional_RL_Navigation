@@ -18,6 +18,7 @@ class EnvVisualizer:
         self.robot_last_pos = None
         self.robot_traj_plot = []
         self.sonar_beams_plot = []
+        self.axis_action = None # sub figure for action command and steer data
         self.axis_sonar = None # sub figure for Sonar measurement
         self.axis_dvl = None # sub figure for DVL measurement
 
@@ -43,10 +44,11 @@ class EnvVisualizer:
         
         # initialize subplot for the map, robot state and sensor measurments
         self.fig = plt.figure(figsize=(24,16))
-        spec = self.fig.add_gridspec(2,3)
+        spec = self.fig.add_gridspec(5,3)
         self.axis_graph = self.fig.add_subplot(spec[:,:2])
-        self.axis_sonar = self.fig.add_subplot(spec[0,2])
-        self.axis_dvl = self.fig.add_subplot(spec[1,2])
+        self.axis_action = self.fig.add_subplot(spec[0,2])
+        self.axis_sonar = self.fig.add_subplot(spec[1:3,2])
+        self.axis_dvl = self.fig.add_subplot(spec[3:,2])
         
         # plot current velocity in the map
         self.axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y)
@@ -81,6 +83,27 @@ class EnvVisualizer:
             self.robot_traj_plot.append(h)
         
         self.robot_last_pos = [self.env.robot.x, self.env.robot.y]
+
+    def plot_action_and_steer_state(self,action):
+        self.axis_action.clear()
+
+        a,w = self.env.robot.actions[action]
+        self.axis_action.text(0,6,"Steer actions",fontweight="bold",fontsize=15)
+        self.axis_action.text(0,5,f"Acceleration (m/s^2): {a:.2f}",fontsize=12)
+        self.axis_action.text(0,4,f"Angular velocity (rad/s): {w:.2f}",fontsize=12)
+        
+        # robot steer state
+        self.axis_action.text(0,2,"Steer states",fontweight="bold",fontsize=15)
+        self.axis_action.text(0,1,f"Forward speed (m/s): {self.env.robot.speed:.2f}",fontsize=12)
+        self.axis_action.text(0,0,f"Orientation (rad): {self.env.robot.theta:.2f}",fontsize=12)
+
+        self.axis_action.set_ylim([-1.0,7.0])
+        self.axis_action.set_xticks([])
+        self.axis_action.set_yticks([])
+        self.axis_action.spines["left"].set_visible(False)
+        self.axis_action.spines["top"].set_visible(False)
+        self.axis_action.spines["right"].set_visible(False)
+        self.axis_action.spines["bottom"].set_visible(False)
 
     def plot_measurements(self):
         self.axis_sonar.clear()
@@ -150,6 +173,7 @@ class EnvVisualizer:
 
         self.plot_robot()
         self.plot_measurements()
+        self.plot_action_and_steer_state(action)
     
     def init_animation(self):
         # plot initial robot position
