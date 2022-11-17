@@ -2,7 +2,7 @@ import marinenav_env.envs.marinenav_env as marinenav_env
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.animation import Animation
+import matplotlib.animation as animation
 import copy
 import scipy.spatial
 import gym
@@ -165,10 +165,9 @@ class EnvVisualizer:
             for _ in range(self.env.robot.N):
                 actions.append(action)
 
-        self.animation = mpl.animation.FuncAnimation(self.fig, self.one_step,frames=actions, \
-                                                     init_func=self.init_animation,
-                                                     interval=100,repeat=False)
-
+        self.animation = animation.FuncAnimation(self.fig, self.one_step,frames=actions, \
+                                                 init_func=self.init_animation,
+                                                 interval=10,repeat=False)
         plt.show(block=False)
 
     def load_episode(self,filename,id):

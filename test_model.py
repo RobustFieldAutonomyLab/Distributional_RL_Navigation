@@ -29,7 +29,7 @@ parser.add_argument(
 
 def run_trial():
     
-    save_dir = "experiment_3"
+    save_dir = "experiment_dist_reward_energy_penalty"
     os.makedirs(save_dir)
     
     train_env = gym.make('marinenav_env:marinenav_env-v0')
@@ -53,10 +53,8 @@ def run_trial():
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    print("after parse")
 
     if args.num_procs == 1:
-        print("before run")
         run_trial()
 
     

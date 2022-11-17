@@ -135,10 +135,14 @@ class MarineNavEnv(gym.Env):
         # save action to history
         self.robot.action_history.append(action)
 
+        dis_before = self.dist_to_goal()
+
         # update robot state after executing the action    
         for _ in range(self.robot.N):
             current_velocity = self.get_velocity(self.robot.x, self.robot.y)
             self.robot.update_state(action,current_velocity)
+
+        dis_after = self.dist_to_goal()
         
         # get observation 
         obs = self.get_observation()
@@ -146,11 +150,14 @@ class MarineNavEnv(gym.Env):
         # constant penalty applied at every time step
         reward = self.timestep_penalty
 
-        # # penalize action according to magnitude (energy consumption)
-        # a,w = self.robot.actions[action]
-        # u = np.matrix([[a],[w]])
-        # p = np.transpose(u) * self.energy_penalty * u
-        # reward += p[0,0]
+        # penalize action according to magnitude (energy consumption)
+        a,w = self.robot.actions[action]
+        u = np.matrix([[a],[w]])
+        p = np.transpose(u) * self.energy_penalty * u
+        reward += p[0,0]
+
+        # reward agent for getting closer to the goal
+        reward += dis_before - dis_after
 
         if self.check_collision():
             reward += self.collision_penalty
@@ -165,6 +172,9 @@ class MarineNavEnv(gym.Env):
             info = {"state":"normal"}
 
         return obs, reward, done, info
+
+    def dist_to_goal(self):
+        return np.linalg.norm(self.goal - np.array([self.robot.x,self.robot.y]))
 
     def get_observation(self, for_visualize=False):
 
