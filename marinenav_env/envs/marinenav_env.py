@@ -325,6 +325,8 @@ class MarineNavEnv(gym.Env):
     def get_velocity(self,x:float, y:float):
         # sort the vortices according to their distance to the query point
         d, idx = self.core_centers.query(np.array([x,y]),k=len(self.cores))
+        if isinstance(idx,np.int64):
+            idx = [idx]
 
         v_radial_set = []
         v_velocity = np.zeros((2,1))

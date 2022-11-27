@@ -6,6 +6,7 @@ import matplotlib.animation as animation
 import copy
 import scipy.spatial
 import gym
+import json
 
 class EnvVisualizer:
 
@@ -194,9 +195,8 @@ class EnvVisualizer:
                                                  interval=10,repeat=False)
         plt.show(block=False)
 
-    def load_episode(self,filename,id):
-        eval_file = np.load(filename,allow_pickle=True)
-        episode = copy.deepcopy(eval_file["episode_data"][id])
+    def load_episode(self,episode_dict):
+        episode = copy.deepcopy(episode_dict)
 
         # load env config
         self.env.sd = episode["env"]["seed"]
@@ -278,6 +278,16 @@ class EnvVisualizer:
         self.env.observation_space = gym.spaces.Box(low = -np.inf * np.ones(obs_len), \
                                                     high = np.inf * np.ones(obs_len), \
                                                     dtype = np.float32)
+
+    def load_episode_from_eval_file(self,filename,id):
+        eval_file = np.load(filename,allow_pickle=True)
+        episode = copy.deepcopy(eval_file["episode_data"][id])
+        self.load_episode(episode)
+
+    def load_episode_from_json_file(self,filename):
+        with open(filename,"r") as f:
+            episode = json.load(f)
+        self.load_episode(episode)
 
     def play_episode(self):
         self.robot_last_pos = None
