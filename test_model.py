@@ -38,7 +38,9 @@ def reset_scenario_1():
     d = np.array([1.0,-1.0])
     d /= np.linalg.norm(d)
     
-    positions = [c-16*d,c-8*d,c,c+8*d,c+16*d]
+    
+    # positions = [c-12*d,c-6*d,c,c+6*d,c+12*d]
+    positions = list(np.linspace(c-13*d,c+13*d,5))
 
     # set a virtual vortex core
     core = marinenav_env.Core(50.5,50.5,0,0.0)
@@ -62,22 +64,56 @@ def reset_scenario_1():
 
     return test_env.get_observation()
 
+def reset_scenario_2():
+    test_env.cores.clear()
+    test_env.obstacles.clear()
+
+    # set a virtual vortex core
+    core = marinenav_env.Core(50.5,50.0,0,0.0)
+    test_env.cores.append(core)
+    c_centers = np.array([[core.x,core.y]])
+    test_env.core_centers = scipy.spatial.KDTree(c_centers)
+
+    c = np.array([25.0,25.0])
+    obs = marinenav_env.Obstacle(c[0],c[1],20.0)
+    test_env.obstacles.append(obs)
+    centers = np.array([[obs.x,obs.y]])
+    test_env.obs_centers = scipy.spatial.KDTree(centers)
+
+    test_env.reset_robot()
+
+    return test_env.get_observation()
+
+
+
 if __name__ == "__main__":
 
-    save_dir = "experiment_dist_reward_energy_penalty"
-    model_file = "best_model.zip"
+    # save_dir = "experiment_dist_reward_energy_penalty"
+    save_dir = "experiment_12_11"
+    model_file = "latest_model.zip"
+    eval_file = "evaluations.npz"
 
     DQN_agent = DQN.load(os.path.join(save_dir,model_file),print_system_info=True)
 
-    test_env = gym.make('marinenav_env:marinenav_env-v0')
-
     ev = env_visualizer.EnvVisualizer()
+
+    # ev.load_episode_from_eval_file(os.path.join(save_dir,eval_file),-2)
+
+    test_env = ev.env
+
+    # test_env.reset_robot()
 
     first_obs = reset_scenario_1()
 
     evaluation(first_obs,DQN_agent)
 
-    ev.load_episode(test_env.episode_data())
+    test_env.save_episode("test.json")
 
-    ev.play_episode()
+    # ev.load_episode(test_env.episode_data())
+
+    ev_2 = env_visualizer.EnvVisualizer()
+    
+    ev_2.load_episode_from_json_file("test.json")
+
+    ev_2.play_episode()
 

@@ -193,7 +193,7 @@ class EnvVisualizer:
         self.animation = animation.FuncAnimation(self.fig, self.one_step,frames=actions, \
                                                  init_func=self.init_animation,
                                                  interval=10,repeat=False)
-        plt.show(block=False)
+        plt.show()
 
     def load_episode(self,episode_dict):
         episode = copy.deepcopy(episode_dict)

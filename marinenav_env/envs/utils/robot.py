@@ -55,7 +55,7 @@ class Robot:
         return len(self.actions)
 
     def compute_penalty_matrix(self):
-        # scale to [-1,0]
+        # scale the penalty value to [-1,0]
         scale_a = 1 / (np.max(self.a)*np.max(self.a))
         scale_w = 1 / (np.max(self.w)*np.max(self.w))
         p = -0.5 * np.matrix([[scale_a,0.0],[0.0,scale_w]])
