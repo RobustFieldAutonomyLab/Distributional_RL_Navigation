@@ -97,13 +97,11 @@ if __name__ == "__main__":
 
     ev = env_visualizer.EnvVisualizer()
 
-    # ev.load_episode_from_eval_file(os.path.join(save_dir,eval_file),-2)
+    ev.load_episode_from_eval_file(os.path.join(save_dir,eval_file),-1)
 
     test_env = ev.env
 
-    # test_env.reset_robot()
-
-    first_obs = reset_scenario_1()
+    first_obs = reset_scenario_2()
 
     evaluation(first_obs,DQN_agent)
 

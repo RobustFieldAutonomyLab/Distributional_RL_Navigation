@@ -50,9 +50,10 @@ class MarineNavEnv(gym.Env):
         self.goal = np.array([45.0,45.0]) # goal position
         self.goal_dis = 2.0 # max distance to goal considered as reached
         self.timestep_penalty = -1.0
+        self.dist_reward = self.robot.compute_dist_reward_scale()
         self.energy_penalty = self.robot.compute_penalty_matrix()
-        self.collision_penalty = -50.0
-        self.goal_reward = 100.0
+        self.collision_penalty = -200.0
+        self.goal_reward = 200.0
         self.discount = 0.99
         self.num_cores = 8
         self.num_obs = 5
@@ -68,6 +69,20 @@ class MarineNavEnv(gym.Env):
 
         num_cores = self.num_cores
         num_obs = self.num_obs
+
+        # reset start and goal state randomly
+        iteration = 500
+        max_dist = 0.0
+        while True:
+            start = self.rd.uniform(low = 5.0*np.ones(2), high = np.array([self.width-5.0,self.height-5.0]))
+            goal = self.rd.uniform(low = 5.0*np.ones(2), high = np.array([self.width-5.0,self.height-5.0]))
+            iteration -= 1
+            if np.linalg.norm(goal-start) > max_dist:
+                max_dist = np.linalg.norm(goal-start)
+                self.start = start
+                self.goal = goal
+            if max_dist > 25.0 or iteration == 0:
+                break
 
         # generate vortex with random position, spinning direction and strength
         iteration = 500
@@ -126,8 +141,13 @@ class MarineNavEnv(gym.Env):
 
     def reset_robot(self):
         # reset robot state
+        theta = self.rd.uniform(low = 0.0, high = 2*np.pi)
+        speed = self.rd.uniform(low = 0.0, high = self.robot.max_speed)
         current_v = self.get_velocity(self.start[0],self.start[1])
-        self.robot.reset_state(self.start[0],self.start[1],current_velocity=current_v)
+        self.robot.reset_state(self.start[0],self.start[1], \
+                               theta=theta, \
+                               speed=speed, \
+                               current_velocity=current_v)
 
     def step(self, action):
         # execute action, update the environment, and return (obs, reward, done)
@@ -150,14 +170,14 @@ class MarineNavEnv(gym.Env):
         # constant penalty applied at every time step
         reward = self.timestep_penalty
 
-        # penalize action according to magnitude (energy consumption)
-        a,w = self.robot.actions[action]
-        u = np.matrix([[a],[w]])
-        p = np.transpose(u) * self.energy_penalty * u
-        reward += p[0,0]
+        # # penalize action according to magnitude (energy consumption)
+        # a,w = self.robot.actions[action]
+        # u = np.matrix([[a],[w]])
+        # p = np.transpose(u) * self.energy_penalty * u
+        # reward += p[0,0]
 
         # reward agent for getting closer to the goal
-        reward += dis_before - dis_after
+        reward += np.clip(self.dist_reward*(dis_before-dis_after), -1.0, 1.0)
 
         if self.check_collision():
             reward += self.collision_penalty

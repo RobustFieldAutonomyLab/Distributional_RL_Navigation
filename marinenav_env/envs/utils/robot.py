@@ -54,6 +54,10 @@ class Robot:
     def compute_actions_dimension(self):
         return len(self.actions)
 
+    def compute_dist_reward_scale(self):
+        # scale the distance reward to [-1,1]
+        return 1 / (self.max_speed * self.N * self.dt)
+    
     def compute_penalty_matrix(self):
         # scale the penalty value to [-1,0]
         scale_a = 1 / (np.max(self.a)*np.max(self.a))
