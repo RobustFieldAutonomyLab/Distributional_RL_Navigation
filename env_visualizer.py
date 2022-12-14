@@ -61,6 +61,10 @@ class EnvVisualizer:
         self.axis_graph.set_aspect('equal')
         self.axis_graph.set_xlim([0.0,self.env.width])
         self.axis_graph.set_ylim([0.0,self.env.height])
+
+        # plot start and goal state
+        self.axis_graph.scatter(self.env.start[0],self.env.start[1],marker="o",color="r",s=80,zorder=6)
+        self.axis_graph.scatter(self.env.goal[0],self.env.goal[1],marker="*",color="b",s=200,zorder=6)
     
     def plot_robot(self):
         if self.robot_plot != None:
@@ -261,6 +265,8 @@ class EnvVisualizer:
         self.env.robot.w = np.array(episode["robot"]["w"])
         self.env.robot.compute_k()
         self.env.robot.compute_actions()
+        self.env.robot.init_theta = episode["robot"]["init_theta"]
+        self.env.robot.init_speed = episode["robot"]["init_speed"]
 
         # load sonar config
         self.env.robot.sonar.range = episode["robot"]["sonar"]["range"]
@@ -295,7 +301,8 @@ class EnvVisualizer:
             plot[0].remove()
         self.robot_traj_plot.clear()
 
-        self.env.reset_robot()
+        current_v = self.env.get_velocity(self.env.start[0],self.env.start[1])
+        self.env.robot.reset_state(self.env.start[0],self.env.start[1], current_velocity=current_v)
 
         self.init_visualize()
 

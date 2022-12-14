@@ -52,8 +52,8 @@ class MarineNavEnv(gym.Env):
         self.timestep_penalty = -1.0
         self.dist_reward = self.robot.compute_dist_reward_scale()
         self.energy_penalty = self.robot.compute_penalty_matrix()
-        self.collision_penalty = -200.0
-        self.goal_reward = 200.0
+        self.collision_penalty = -100.0
+        self.goal_reward = 100.0
         self.discount = 0.99
         self.num_cores = 8
         self.num_obs = 5
@@ -141,13 +141,10 @@ class MarineNavEnv(gym.Env):
 
     def reset_robot(self):
         # reset robot state
-        theta = self.rd.uniform(low = 0.0, high = 2*np.pi)
-        speed = self.rd.uniform(low = 0.0, high = self.robot.max_speed)
+        self.robot.init_theta = self.rd.uniform(low = 0.0, high = 2*np.pi)
+        self.robot.init_speed = self.rd.uniform(low = 0.0, high = self.robot.max_speed)
         current_v = self.get_velocity(self.start[0],self.start[1])
-        self.robot.reset_state(self.start[0],self.start[1], \
-                               theta=theta, \
-                               speed=speed, \
-                               current_velocity=current_v)
+        self.robot.reset_state(self.start[0],self.start[1], current_velocity=current_v)
 
     def step(self, action):
         # execute action, update the environment, and return (obs, reward, done)
@@ -177,7 +174,7 @@ class MarineNavEnv(gym.Env):
         # reward += p[0,0]
 
         # reward agent for getting closer to the goal
-        reward += np.clip(self.dist_reward*(dis_before-dis_after), -1.0, 1.0)
+        reward += self.dist_reward*(dis_before-dis_after)
 
         if self.check_collision():
             reward += self.collision_penalty
@@ -431,6 +428,8 @@ class MarineNavEnv(gym.Env):
         episode["robot"]["max_speed"] = self.robot.max_speed
         episode["robot"]["a"] = list(self.robot.a)
         episode["robot"]["w"] = list(self.robot.w)
+        episode["robot"]["init_theta"] = self.robot.init_theta
+        episode["robot"]["init_speed"] = self.robot.init_speed
 
         # save sonar config
         episode["robot"]["sonar"] = {}

@@ -43,6 +43,9 @@ class Robot:
         self.speed = None # steering foward speed
         self.velocity = None # velocity wrt sea floor
 
+        self.init_theta = 0.0 # theta at initial position
+        self.init_speed = 0.0 # speed at initial position
+
         self.action_history = [] # history of action commands in one episode
 
     def compute_k(self):
@@ -55,7 +58,7 @@ class Robot:
         return len(self.actions)
 
     def compute_dist_reward_scale(self):
-        # scale the distance reward to [-1,1]
+        # scale the distance reward
         return 1 / (self.max_speed * self.N * self.dt)
     
     def compute_penalty_matrix(self):
@@ -65,13 +68,13 @@ class Robot:
         p = -0.5 * np.matrix([[scale_a,0.0],[0.0,scale_w]])
         return p
 
-    def reset_state(self,x,y,theta=0.0,speed=0.0,current_velocity=np.zeros(2)):
+    def reset_state(self,x,y,current_velocity=np.zeros(2)):
         # only called when resetting the environment
         self.action_history.clear()
         self.x = x
         self.y = y
-        self.theta = theta 
-        self.speed = speed
+        self.theta = self.init_theta 
+        self.speed = self.init_speed
         self.update_velocity(current_velocity) 
 
     def get_robot_transform(self):
