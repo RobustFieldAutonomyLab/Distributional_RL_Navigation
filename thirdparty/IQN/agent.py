@@ -2,8 +2,8 @@ import torch
 import torch.optim as optim
 import numpy as np
 import random
-from model import IQN
-from replay_buffer import ReplayBuffer
+from thirdparty.IQN.model import IQN
+from thirdparty.IQN.replay_buffer import ReplayBuffer
 import os
 
 class IQNAgent():
@@ -19,7 +19,7 @@ class IQNAgent():
                  TAU=1.0, 
                  GAMMA=0.99, 
                  UPDATE_EVERY=4,
-                 learning_starts = 10000,
+                 learning_starts=10000,
                  target_update_interval=10000,
                  exploration_fraction=0.1,
                  initial_eps=1.0,
@@ -44,12 +44,13 @@ class IQNAgent():
         self.state_size = state_size
         self.action_size = action_size
         self.device = device
+        self.LR = LR
         self.TAU = TAU
         self.GAMMA = GAMMA
         self.UPDATE_EVERY = UPDATE_EVERY
         self.BATCH_SIZE = BATCH_SIZE
         self.n_step = n_step
-        self.learning_starts = learning_starts,
+        self.learning_starts = learning_starts
         self.target_update_interval = target_update_interval
         self.exploration_fraction = exploration_fraction
         self.initial_eps = initial_eps
@@ -59,7 +60,7 @@ class IQNAgent():
         self.qnetwork_local = IQN(self.state_size, self.action_size, layer_size, seed, device).to(device)
         self.qnetwork_target = IQN(self.state_size, self.action_size, layer_size, seed, device).to(device)
 
-        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
+        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=self.LR)
         #print(self.qnetwork_local)
         
         # Replay memory
@@ -81,7 +82,7 @@ class IQNAgent():
         # load trained IQN models
         self.qnetwork_local = IQN.load(path,device)
         self.qnetwork_target = IQN.load(path,device)
-        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
+        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=self.LR)
 
     def learn(self,
               total_timesteps,
@@ -280,7 +281,7 @@ class IQNAgent():
             )
 
             # save the latest IQN model
-            self.qnetwork_local.save(os.path.join(eval_log_path,"latest_model.zip"))
+            # self.qnetwork_local.save(os.path.join(eval_log_path,"latest_model.zip"))
 
 
 def calculate_huber_loss(td_errors, k=1.0):
