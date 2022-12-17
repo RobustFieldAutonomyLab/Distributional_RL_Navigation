@@ -61,6 +61,12 @@ class MarineNavEnv(gym.Env):
         self.cores = [] # vortex cores
         self.obstacles = [] # cylinder obstacles
 
+    def get_state_space_dimension(self):
+        return 2 + 2 + 2 * self.robot.sonar.num_beams
+    
+    def get_action_space_dimension(self):
+        return self.robot.compute_actions_dimension()
+
     def reset(self):
         # reset the environment
         

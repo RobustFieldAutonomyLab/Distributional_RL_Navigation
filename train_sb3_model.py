@@ -1,15 +1,15 @@
-from tabnanny import verbose
+# from tabnanny import verbose
 import numpy as np
 import sys
 sys.path.insert(0,"./thirdparty")
-from stable_baselines3 import PPO
-from stable_baselines3 import A2C
-from stable_baselines3 import DQN
+from thirdparty import PPO
+from thirdparty import A2C
+from thirdparty import DQN
 import gym
 import os
 import argparse
 
-parser = argparse.ArgumentParser(description="Run baseline experiments")
+parser = argparse.ArgumentParser(description="Train sb3 model")
 parser.add_argument(
     "-P",
     "--num-procs",
@@ -29,7 +29,7 @@ parser.add_argument(
 
 def run_trial():
     
-    save_dir = "experiment_dist_reward_energy_penalty"
+    save_dir = "experiment_12_13"
     os.makedirs(save_dir)
     
     train_env = gym.make('marinenav_env:marinenav_env-v0')
