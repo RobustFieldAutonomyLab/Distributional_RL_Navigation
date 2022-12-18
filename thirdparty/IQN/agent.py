@@ -102,7 +102,7 @@ class IQNAgent():
         ep_length = 0
         ep_num = 0
         
-        while self.current_timestep < total_timesteps:
+        while self.current_timestep <= total_timesteps:
             eps = self.linear_eps(total_timesteps)
             action = self.act(state,eps,cvar)
             next_state, reward, done, _ = train_env.step(action)
@@ -275,13 +275,13 @@ class IQNAgent():
             np.savez(
                 os.path.join(eval_log_path,"evaluations.npz"),
                 timesteps=self.eval_timesteps,
-                ep_rewards=self.eval_ep_rewards,
-                ep_lengths=self.eval_ep_lengths,
-                ep_data=self.eval_ep_data
+                episode_rewards=self.eval_ep_rewards,
+                episode_lengths=self.eval_ep_lengths,
+                episode_data=self.eval_ep_data
             )
 
             # save the latest IQN model
-            # self.qnetwork_local.save(os.path.join(eval_log_path,"latest_model.zip"))
+            self.qnetwork_local.save(eval_log_path)
 
 
 def calculate_huber_loss(td_errors, k=1.0):

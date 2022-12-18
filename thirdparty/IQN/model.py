@@ -1,12 +1,16 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import os
+import json
+
 class IQN(nn.Module):
     '''implicit quantile network model'''
     def __init__(self, state_size, action_size, layer_size, seed, device="cpu"):
         super(IQN, self).__init__()
         # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.device = torch.device(device)
+        self.seed_id = seed
         self.seed = torch.manual_seed(seed)
         self.state_size = state_size
         self.action_size = action_size
@@ -68,22 +72,36 @@ class IQN(nn.Module):
         qvals = quantiles.mean(dim=1)
         return qvals
 
-    def get_constructor_parameters(self):
+    def get_constructor_parameters(self):       
         return dict(state_size=self.state_size, \
                     action_size=self.action_size, \
                     layer_size=self.layer_size, \
-                    seed=self.seed)
+                    seed=self.seed_id)
 
-    def save(self,path):
-        torch.save({"state_dict": self.state_dict(), "constructor_params": self.get_constructor_parameters()}, path)
+    def save(self,directory):
+        # torch.save({"state_dict": self.state_dict(), "constructor_params": self.get_constructor_parameters()}, path)
+        # torch.save(self.state_dict(), path)
+
+        # save network parameters
+        torch.save(self.state_dict(),os.path.join(directory,"network_params.pth"))
+        
+        # save constructor parameters
+        with open(os.path.join(directory,"constructor_params.json"),mode="w") as constructor_f:
+            json.dump(self.get_constructor_parameters(),constructor_f)
 
     @classmethod
-    def load(cls,path,device="cpu"):
-        model_params = torch.load(path)
-        model_params["constructor_params"]["device"] = device
+    def load(cls,directory,device="cpu"):
+        
+        # load network parameters
+        model_params = torch.load(os.path.join(directory,"network_params.pth"))
 
-        model = cls(**model_params["constructor_params"])
-        model.load_state_dict(model_params["state_dict"])
+        # load constructor parameters
+        with open(os.path.join(directory,"constructor_params.json"), mode="r") as constructor_f:
+            constructor_params = json.load(constructor_f)
+            constructor_params["device"] = device
+
+        model = cls(**constructor_params)
+        model.load_state_dict(model_params)
         model.to(device)
 
         return model
