@@ -52,7 +52,7 @@ class MarineNavEnv(gym.Env):
         self.timestep_penalty = -1.0
         self.dist_reward = self.robot.compute_dist_reward_scale()
         self.energy_penalty = self.robot.compute_penalty_matrix()
-        self.collision_penalty = -100.0
+        self.collision_penalty = -50.0
         self.goal_reward = 100.0
         self.discount = 0.99
         self.num_cores = 8
@@ -173,14 +173,14 @@ class MarineNavEnv(gym.Env):
         # constant penalty applied at every time step
         reward = self.timestep_penalty
 
-        # # penalize action according to magnitude (energy consumption)
-        # a,w = self.robot.actions[action]
-        # u = np.matrix([[a],[w]])
-        # p = np.transpose(u) * self.energy_penalty * u
-        # reward += p[0,0]
+        # penalize action according to magnitude (energy consumption)
+        a,w = self.robot.actions[action]
+        u = np.matrix([[a],[w]])
+        p = np.transpose(u) * self.energy_penalty * u
+        reward += p[0,0]
 
         # reward agent for getting closer to the goal
-        reward += self.dist_reward*(dis_before-dis_after)
+        reward += dis_before-dis_after
 
         if self.check_collision():
             reward += self.collision_penalty
