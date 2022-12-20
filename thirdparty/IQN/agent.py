@@ -94,8 +94,8 @@ class IQNAgent():
         
         state = train_env.reset()
 
-        # Sample CVaR value from (0.0,1.0)
-        cvar = 1 - np.random.uniform(0.0, 1.0)
+        # # Sample CVaR value from (0.0,1.0)
+        # cvar = 1 - np.random.uniform(0.0, 1.0)
 
         # current episode 
         ep_reward = 0.0
@@ -104,7 +104,7 @@ class IQNAgent():
         
         while self.current_timestep <= total_timesteps:
             eps = self.linear_eps(total_timesteps)
-            action = self.act(state,eps,cvar)
+            action = self.act(state,eps)
             next_state, reward, done, _ = train_env.step(action)
 
             ep_reward += train_env.discount ** ep_length * reward
@@ -153,7 +153,7 @@ class IQNAgent():
                 ep_length = 0
 
                 state = train_env.reset()
-                cvar = 1 - np.random.uniform(0.0, 1.0)
+                # cvar = 1 - np.random.uniform(0.0, 1.0)
 
             self.current_timestep += 1
 
