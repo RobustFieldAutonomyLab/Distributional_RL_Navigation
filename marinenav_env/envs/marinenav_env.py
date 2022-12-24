@@ -50,8 +50,8 @@ class MarineNavEnv(gym.Env):
         self.goal = np.array([45.0,45.0]) # goal position
         self.goal_dis = 2.0 # max distance to goal considered as reached
         self.timestep_penalty = -1.0
-        self.dist_reward = self.robot.compute_dist_reward_scale()
-        self.energy_penalty = self.robot.compute_penalty_matrix()
+        # self.dist_reward = self.robot.compute_dist_reward_scale()
+        # self.energy_penalty = self.robot.compute_penalty_matrix()
         self.collision_penalty = -50.0
         self.goal_reward = 100.0
         self.discount = 0.99
@@ -91,19 +91,20 @@ class MarineNavEnv(gym.Env):
                 break
 
         # generate vortex with random position, spinning direction and strength
-        iteration = 500
-        while True:
-            center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
-            direction = self.rd.binomial(1,0.5)
-            v_edge = self.rd.uniform(low = self.v_range[0], high = self.v_range[1])
-            Gamma = 2 * np.pi * self.r * v_edge
-            core = Core(center[0],center[1],direction,Gamma)
-            iteration -= 1
-            if self.check_core(core):
-                self.cores.append(core)
-                num_cores -= 1
-            if iteration == 0 or num_cores == 0:
-                break
+        if num_cores > 0:
+            iteration = 500
+            while True:
+                center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
+                direction = self.rd.binomial(1,0.5)
+                v_edge = self.rd.uniform(low = self.v_range[0], high = self.v_range[1])
+                Gamma = 2 * np.pi * self.r * v_edge
+                core = Core(center[0],center[1],direction,Gamma)
+                iteration -= 1
+                if self.check_core(core):
+                    self.cores.append(core)
+                    num_cores -= 1
+                if iteration == 0 or num_cores == 0:
+                    break
         
         centers = None
         for core in self.cores:
@@ -114,20 +115,22 @@ class MarineNavEnv(gym.Env):
                 centers = np.vstack((centers,c))
         
         # KDTree storing vortex core center positions
-        self.core_centers = scipy.spatial.KDTree(centers)
+        if centers is not None:
+            self.core_centers = scipy.spatial.KDTree(centers)
 
         # generate obstacles with random position and size
-        iteration = 500
-        while True:
-            center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
-            r = self.rd.uniform(low = self.obs_r_range[0], high = self.obs_r_range[1])
-            obs = Obstacle(center[0],center[1],r)
-            iteration -= 1
-            if self.check_obstacle(obs):
-                self.obstacles.append(obs)
-                num_obs -= 1
-            if iteration == 0 or num_obs == 0:
-                break
+        if num_obs > 0:
+            iteration = 500
+            while True:
+                center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
+                r = self.rd.uniform(low = self.obs_r_range[0], high = self.obs_r_range[1])
+                obs = Obstacle(center[0],center[1],r)
+                iteration -= 1
+                if self.check_obstacle(obs):
+                    self.obstacles.append(obs)
+                    num_obs -= 1
+                if iteration == 0 or num_obs == 0:
+                    break
 
         centers = None
         for obs in self.obstacles:
@@ -138,7 +141,8 @@ class MarineNavEnv(gym.Env):
                 centers = np.vstack((centers,c))
         
         # KDTree storing obstacle center positions
-        self.obs_centers = scipy.spatial.KDTree(centers)
+        if centers is not None: 
+            self.obs_centers = scipy.spatial.KDTree(centers)
 
         # reset robot state
         self.reset_robot()
@@ -173,11 +177,11 @@ class MarineNavEnv(gym.Env):
         # constant penalty applied at every time step
         reward = self.timestep_penalty
 
-        # penalize action according to magnitude (energy consumption)
-        a,w = self.robot.actions[action]
-        u = np.matrix([[a],[w]])
-        p = np.transpose(u) * self.energy_penalty * u
-        reward += p[0,0]
+        # # penalize action according to magnitude (energy consumption)
+        # a,w = self.robot.actions[action]
+        # u = np.matrix([[a],[w]])
+        # p = np.transpose(u) * self.energy_penalty * u
+        # reward += p[0,0]
 
         # reward agent for getting closer to the goal
         reward += dis_before-dis_after
@@ -256,6 +260,9 @@ class MarineNavEnv(gym.Env):
 
 
     def check_collision(self):
+        if len(self.obstacles) == 0:
+            return False
+        
         d, idx = self.obs_centers.query(np.array([self.robot.x,self.robot.y]))
         if d <= self.obstacles[idx].r + self.robot.r:
             return True
@@ -346,6 +353,9 @@ class MarineNavEnv(gym.Env):
         return True
 
     def get_velocity(self,x:float, y:float):
+        if len(self.cores) == 0:
+            return np.zeros(2)
+        
         # sort the vortices according to their distance to the query point
         d, idx = self.core_centers.query(np.array([x,y]),k=len(self.cores))
         if isinstance(idx,np.int64):
@@ -377,6 +387,9 @@ class MarineNavEnv(gym.Env):
         
         return np.array([v_velocity[0,0], v_velocity[1,0]])
 
+    def get_velocity_test(self,x:float, y:float):
+        return np.zeros(2)
+
     def compute_speed(self, Gamma:float, d:float):
         if d <= self.r:
             return Gamma / (2*np.pi*self.r*self.r) * d
@@ -401,7 +414,7 @@ class MarineNavEnv(gym.Env):
         episode["env"]["goal"] = list(self.goal)
         episode["env"]["goal_dis"] = self.goal_dis
         episode["env"]["timestep_penalty"] = self.timestep_penalty
-        episode["env"]["energy_penalty"] = self.energy_penalty.tolist()
+        # episode["env"]["energy_penalty"] = self.energy_penalty.tolist()
         episode["env"]["collision_penalty"] = self.collision_penalty
         episode["env"]["goal_reward"] = self.goal_reward
         episode["env"]["discount"] = self.discount

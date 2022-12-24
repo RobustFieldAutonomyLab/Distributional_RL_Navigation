@@ -135,10 +135,9 @@ class Robot:
 
             self.sonar.reflections.append([x,y,0])
             
-            # compute the beam reflection given obstcale  
+            # compute the beam reflection given obstcales
+            reflection_dist = np.infty  
             for obs in obstacles:
-                if self.sonar.reflections[-1][-1] != 0:
-                    break
                 if np.abs(angle - np.pi/2) < 1e-03 or \
                     np.abs(angle - 3*np.pi/2) < 1e-03:
                     # vertical line
@@ -178,9 +177,15 @@ class Robot:
                     # beyond detection range
                     continue
                 if np.dot(v,np.array([np.cos(angle),np.sin(angle)])) < 0.0:
-                    # the intesection point is in the opposite direction of the beam
+                    # the intersection point is in the opposite direction of the beam
                     continue
 
+                if self.sonar.reflections[-1][-1] != 0:
+                    # check if the current intersection point is closer
+                    if np.linalg.norm(v) >= reflection_dist: 
+                        break
+                
+                reflection_dist = np.linalg.norm(v)
                 self.sonar.reflections[-1] = [v[0]+self.x,v[1]+self.y,1]
 
                      

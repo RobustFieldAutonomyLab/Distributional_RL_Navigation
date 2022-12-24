@@ -216,7 +216,7 @@ class EnvVisualizer:
         self.env.goal = np.array(episode["env"]["goal"])
         self.env.goal_dis = episode["env"]["goal_dis"]
         self.env.timestep_penalty = episode["env"]["timestep_penalty"]
-        self.env.energy_penalty = np.matrix(episode["env"]["energy_penalty"])
+        # self.env.energy_penalty = np.matrix(episode["env"]["energy_penalty"])
         self.env.collision_penalty = episode["env"]["collision_penalty"]
         self.env.goal_reward = episode["env"]["goal_reward"]
         self.env.discount = episode["env"]["discount"]
@@ -236,7 +236,8 @@ class EnvVisualizer:
                 c = np.array([[core.x,core.y]])
                 centers = np.vstack((centers,c))
         
-        self.env.core_centers = scipy.spatial.KDTree(centers)
+        if centers is not None:
+            self.env.core_centers = scipy.spatial.KDTree(centers)
 
         # load obstacles
         self.env.obstacles.clear()
@@ -252,7 +253,8 @@ class EnvVisualizer:
                 c = np.array([[obs.x,obs.y]])
                 centers = np.vstack((centers,c))
 
-        self.env.obs_centers = scipy.spatial.KDTree(centers)
+        if centers is not None:
+            self.env.obs_centers = scipy.spatial.KDTree(centers)
 
         # load robot config
         self.env.robot.dt = episode["robot"]["dt"]
