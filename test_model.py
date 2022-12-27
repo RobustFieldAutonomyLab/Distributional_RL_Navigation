@@ -3,6 +3,7 @@ sys.path.insert(0,"./thirdparty")
 from stable_baselines3 import PPO
 from stable_baselines3 import A2C
 from stable_baselines3 import DQN
+from thirdparty import QRDQN
 from thirdparty import IQNAgent
 import os
 import gym
@@ -248,9 +249,9 @@ if __name__ == "__main__":
     first_obs = reset_scenario_1()
 
     ##### DQN #####
-    DQN_agent = DQN.load(os.path.join(save_dir,model_file),print_system_info=True)
+    #DQN_agent = DQN.load(os.path.join(save_dir,model_file),print_system_info=True)
 
-    evaluation(first_obs,DQN_agent)
+    #evaluation(first_obs,DQN_agent)
     ##### DQN #####
 
     ##### IQN #####
@@ -264,6 +265,12 @@ if __name__ == "__main__":
 
     # evaluation_IQN(first_obs,IQN_agent)
     ##### IQN #####
+
+    ##### QR-DQN #####
+    QRDQN_agent = QRDQN.load(os.path.join(save_dir,model_file),print_system_info=True)
+
+    evaluation(first_obs,QRDQN_agent)
+    ##### QR-DQN #####
 
     test_env.save_episode("test.json")
 

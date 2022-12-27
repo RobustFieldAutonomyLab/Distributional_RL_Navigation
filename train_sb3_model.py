@@ -5,6 +5,7 @@ sys.path.insert(0,"./thirdparty")
 from thirdparty import PPO
 from thirdparty import A2C
 from thirdparty import DQN
+from thirdparty import QRDQN
 import gym
 import os
 import argparse
@@ -86,14 +87,28 @@ def run_trial(device,params):
     train_env = gym.make('marinenav_env:marinenav_env-v0',seed=params["seed"])
     evaluate_env = gym.make('marinenav_env:marinenav_env-v0',seed=0) 
 
-    model = DQN(policy='MlpPolicy',
-                env=train_env,
-                train_freq=1,
-                verbose=1,
-                seed=1,
-                gamma=train_env.discount,
-                device=device)
-            
+    #model = DQN(policy='MlpPolicy',
+    #            env=train_env,
+    #            train_freq=1,
+    #            verbose=1,
+    #            seed=1,
+    #            gamma=train_env.discount,
+    #            device=device)
+    
+    policy_args = {"n_quantiles":8}
+    model = QRDQN(policy='MlpPolicy',
+                  env=train_env,
+                  learning_starts=10000,
+                  policy_kwargs=policy_args,
+                  train_freq=1,
+                  exploration_fraction=0.1,
+                  exploration_initial_eps=1.0,
+                  exploration_final_eps=0.05,
+                  verbose=1,
+                  seed=1,
+                  gamma=train_env.discount,
+                  device=device)
+
     model.learn(total_timesteps=params["total_timesteps"],
                 eval_env=evaluate_env,
                 eval_freq=params["eval_freq"],
