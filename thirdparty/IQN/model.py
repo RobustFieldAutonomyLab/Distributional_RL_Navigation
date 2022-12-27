@@ -93,7 +93,8 @@ class IQN(nn.Module):
     def load(cls,directory,device="cpu"):
         
         # load network parameters
-        model_params = torch.load(os.path.join(directory,"network_params.pth"))
+        model_params = torch.load(os.path.join(directory,"network_params.pth"),
+                                  map_location=device)
 
         # load constructor parameters
         with open(os.path.join(directory,"constructor_params.json"), mode="r") as constructor_f:
