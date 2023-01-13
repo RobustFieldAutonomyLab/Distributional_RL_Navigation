@@ -12,6 +12,7 @@ import numpy as np
 import copy
 import scipy.spatial
 import env_visualizer
+import json
 
 def evaluation(first_observation, agent):
     print("===== Evaluation =====")
@@ -38,8 +39,19 @@ def evaluation_IQN(first_observation, agent):
     length = 0
     done = False
     
+    quantiles_data = None
+    taus_data = None
+
     while not done and length < 1000:
-        action = agent.act(observation,0.0)
+        action, quantiles, taus = agent.act_eval_IQN(observation,0.0,0.1)
+        
+        if quantiles_data is None:
+            quantiles_data = quantiles
+            taus_data = taus
+        else:
+            quantiles_data = np.concatenate((quantiles_data,quantiles))
+            taus_data = np.concatenate((taus_data,taus))
+        
         observation, reward, done, _ = test_env.step(int(action))
         cumulative_reward += test_env.discount ** length * reward
         length += 1
@@ -48,6 +60,12 @@ def evaluation_IQN(first_observation, agent):
 
     print("episode length: ",length)
     print("cumulative reward: ",cumulative_reward)
+
+    ep_data = test_env.episode_data()
+    ep_data["robot"]["actions_quantiles"] = quantiles_data.tolist()
+    ep_data["robot"]["actions_taus"] = taus_data.tolist()
+
+    return ep_data
 
 def reset_episode_scenario():
     current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
@@ -238,7 +256,7 @@ def reset_random():
 
 if __name__ == "__main__":
 
-    save_dir = "experiment_data/experiment_2022-12-23-18-19-03/seed_6"
+    save_dir = "experiment_data/experiment_2022-12-23-18-02-05/seed_2"
     model_file = "latest_model.zip"
     eval_file = "evaluations.npz"
 
@@ -255,26 +273,30 @@ if __name__ == "__main__":
     ##### DQN #####
 
     ##### IQN #####
-    # device = "cuda:0"
+    device = "cuda:0"
 
-    # IQN_agent = IQNAgent(test_env.get_state_space_dimension(),
-    #                      test_env.get_action_space_dimension(),
-    #                      device=device,
-    #                      seed=2)
-    # IQN_agent.load_model(save_dir,device)
+    IQN_agent = IQNAgent(test_env.get_state_space_dimension(),
+                         test_env.get_action_space_dimension(),
+                         device=device,
+                         seed=2)
+    IQN_agent.load_model(save_dir,device)
 
-    # evaluation_IQN(first_obs,IQN_agent)
+    ep_data = evaluation_IQN(first_obs,IQN_agent)
     ##### IQN #####
 
     ##### QR-DQN #####
-    QRDQN_agent = QRDQN.load(os.path.join(save_dir,model_file),print_system_info=True)
+    # QRDQN_agent = QRDQN.load(os.path.join(save_dir,model_file),print_system_info=True)
 
-    evaluation(first_obs,QRDQN_agent)
+    # evaluation(first_obs,QRDQN_agent)
     ##### QR-DQN #####
 
-    test_env.save_episode("test.json")
+    filename = "test.json"
+    with open(filename,"w") as file:
+        json.dump(ep_data,file)
 
-    ev_2 = env_visualizer.EnvVisualizer()
+    # test_env.save_episode("test.json")
+
+    ev_2 = env_visualizer.EnvVisualizer(draw_dist=True)
     
     ev_2.load_episode_from_json_file("test.json")
 

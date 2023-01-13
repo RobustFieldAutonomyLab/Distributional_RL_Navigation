@@ -14,8 +14,8 @@ class IQN(nn.Module):
         self.seed = torch.manual_seed(seed)
         self.state_size = state_size
         self.action_size = action_size
-        self.K = 32 # for action selection
-        self.N = 8 # num tau
+        self.K = 32
+        self.N = 8
         self.n_cos = 64 # embedding dimension
         self.layer_size = layer_size
         self.pis = torch.FloatTensor([np.pi * i for i in range(self.n_cos)]).view(1, 1, self.n_cos).to(self.device)

@@ -189,6 +189,27 @@ class IQNAgent():
         
         return action
 
+    def act_eval_IQN(self, state, eps, cvar=1.0):
+        """Returns action return quantiles and action decision
+        Params
+        ======
+            frame: to adjust epsilon
+            state (array_like): current state
+        """
+        state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
+        self.qnetwork_local.eval()
+        with torch.no_grad():
+            quantiles, taus = self.qnetwork_local.forward(state, self.qnetwork_local.K, cvar)
+            action_values = quantiles.mean(dim=1)
+        self.qnetwork_local.train()
+
+        # epsilon-greedy action selection
+        if random.random() > eps:
+            action = np.argmax(action_values.cpu().data.numpy())
+        else:
+            action = random.choice(np.arange(self.action_size))
+        
+        return action, quantiles.cpu().data.numpy(), taus.cpu().data.numpy()
 
     def train(self, experiences):
         """Update value parameters using given batch of experience tuples
