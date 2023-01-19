@@ -10,7 +10,7 @@ import json
 
 class EnvVisualizer:
 
-    def __init__(self, seed:int=0, draw_dist:bool=False):
+    def __init__(self, seed:int=0, draw_dist:bool=False, cvar_num:int=0):
         self.env = marinenav_env.MarineNavEnv(seed)
         self.env.reset()
         self.fig = None # figure for visualization
@@ -22,7 +22,8 @@ class EnvVisualizer:
         self.axis_action = None # sub figure for action command and steer data
         self.axis_sonar = None # sub figure for Sonar measurement
         self.axis_dvl = None # sub figure for DVL measurement
-        self.axis_dist = None # sub figure for return distribution of actions
+        self.axis_dist = [] # sub figure(s) for return distribution of actions
+        self.cvar_num = cvar_num # number of CVaR values to plot
 
         self.episode_actions = [] # action sequence load from episode data
         self.episode_actions_quantiles = None
@@ -50,13 +51,15 @@ class EnvVisualizer:
         
         # initialize subplot for the map, robot state and sensor measurments
         if self.draw_dist:
-            self.fig = plt.figure(figsize=(32,16))
-            spec = self.fig.add_gridspec(5,4)
-            self.axis_dist = self.fig.add_subplot(spec[:,0])
+            assert self.cvar_num > 0, "cvar_num should be greater than 0 if draw_dist"
+            self.fig = plt.figure(figsize=(self.cvar_num*8+24,16))
+            spec = self.fig.add_gridspec(5,3+self.cvar_num)
+            self.axis_action = self.fig.add_subplot(spec[0,0])
+            self.axis_sonar = self.fig.add_subplot(spec[1:3,0])
+            self.axis_dvl = self.fig.add_subplot(spec[3:,0])
             self.axis_graph = self.fig.add_subplot(spec[:,1:3])
-            self.axis_action = self.fig.add_subplot(spec[0,3])
-            self.axis_sonar = self.fig.add_subplot(spec[1:3,3])
-            self.axis_dvl = self.fig.add_subplot(spec[3:,3])
+            for i in range(self.cvar_num):
+                self.axis_dist.append(self.fig.add_subplot(spec[:,3+i]))
         else:
             self.fig = plt.figure(figsize=(24,16))
             spec = self.fig.add_gridspec(5,3)
@@ -186,33 +189,44 @@ class EnvVisualizer:
         self.axis_dvl.legend(handles=[h1,h2])
         self.axis_dvl.set_title('DVL measurement')
     
-    def plot_return_dist(self,quantiles,taus):
-        self.axis_dist.clear()
+    def plot_return_dist(self,action):
+        for axis in self.axis_dist:
+            axis.clear()
         
         dist_interval = 1
         mean_bar = 0.25
         ylabelleft=[]
         ylabelright=[]
 
-        quantiles = np.array(quantiles)
-        for i, action in enumerate(self.env.robot.actions):
-            q_mean = np.mean(quantiles[:,i])
+        for idx,cvar in enumerate(action["actions_cvars"]):
+        
+            quantiles = np.array(action["actions_quantiles"][idx])
 
-            ylabelleft.append(
-                "\n".join([f"a: {action[0]:.2f}",f"w: {action[1]:.2f}"])
-            )
+            q_means = np.mean(quantiles,axis=0)
+            max_a = np.argmax(q_means)
+            for i, a in enumerate(self.env.robot.actions):
+                q_mean = q_means[i]
+                # q_mean = np.mean(quantiles[:,i])
 
-            ylabelright.append(f"mean: {q_mean:.2f}")
-            
-            self.axis_dist.axhline(i*dist_interval, color="black", linewidth=0.5, zorder=0)
-            self.axis_dist.scatter(quantiles[:,i], i*np.ones(len(quantiles[:,i]))*dist_interval, marker="x")
-            self.axis_dist.hlines(y=i*dist_interval, xmin=np.min(quantiles[:,i]), xmax=np.max(quantiles[:,i]), zorder=0)
-            self.axis_dist.vlines(q_mean, ymin=i*dist_interval-mean_bar, ymax=i*dist_interval+mean_bar,linewidth=2)
+                ylabelleft.append(
+                    "\n".join([f"a: {a[0]:.2f}",f"w: {a[1]:.2f}"])
+                )
 
-        self.axis_dist.set_ylim([-1.0,i+1])
-        self.axis_dist.set_yticks(range(0,i+1))
-        self.axis_dist.set_yticklabels(labels=ylabelleft)
-        # self.axis_dist.twinx().set_yticklabels(labels=ylabelright)
+                ylabelright.append(f"mean: {q_mean:.2f}")
+                
+                self.axis_dist[idx].axhline(i*dist_interval, color="black", linewidth=0.5, zorder=0)
+                self.axis_dist[idx].scatter(quantiles[:,i], i*np.ones(len(quantiles[:,i]))*dist_interval, marker="x")
+                self.axis_dist[idx].hlines(y=i*dist_interval, xmin=np.min(quantiles[:,i]), xmax=np.max(quantiles[:,i]),zorder=0)
+                if i == max_a:
+                    self.axis_dist[idx].vlines(q_mean, ymin=i*dist_interval-mean_bar, ymax=i*dist_interval+mean_bar,color="red",linewidth=4)
+                else:
+                    self.axis_dist[idx].vlines(q_mean, ymin=i*dist_interval-mean_bar, ymax=i*dist_interval+mean_bar,color="blue",linewidth=2)
+
+            self.axis_dist[idx].set_ylim([-1.0,i+1])
+            self.axis_dist[idx].set_yticks(range(0,i+1))
+            self.axis_dist[idx].set_yticklabels(labels=ylabelleft)
+            self.axis_dist[idx].set_title("cvar = "+str(cvar))
+            # self.axis_dist.twinx().set_yticklabels(labels=ylabelright)
 
     def one_step(self,action):
         current_velocity = self.env.get_velocity(self.env.robot.x, self.env.robot.y)
@@ -223,7 +237,7 @@ class EnvVisualizer:
         self.plot_action_and_steer_state(action["action"])
         
         if self.draw_dist and self.dist_step % self.env.robot.N == 0:
-            self.plot_return_dist(action["actions_quantiles"],action["actions_taus"])
+            self.plot_return_dist(action)
 
         self.dist_step += 1
 
@@ -246,8 +260,12 @@ class EnvVisualizer:
                 action = {}
                 action["action"] = a
                 if self.draw_dist:
-                    action["actions_quantiles"] = self.episode_actions_quantiles[i]
-                    action["actions_taus"] = self.episode_actions_taus[i]
+                    action["actions_cvars"] = self.episode_actions_cvars
+                    action["actions_quantiles"] = []
+                    action["actions_taus"] = []
+                    for k in range(len(action["actions_cvars"])):
+                        action["actions_quantiles"].append(self.episode_actions_quantiles[k][i])
+                        action["actions_taus"].append(self.episode_actions_taus[k][i])
                 actions.append(action)
 
         self.animation = animation.FuncAnimation(self.fig, self.one_step,frames=actions, \
@@ -344,7 +362,8 @@ class EnvVisualizer:
                                                     dtype = np.float32)
 
         if self.draw_dist:
-            # load action quantiles and taus
+            # load action cvars, quantiles and taus
+            self.episode_actions_cvars = episode["robot"]["actions_cvars"]
             self.episode_actions_quantiles = episode["robot"]["actions_quantiles"]
             self.episode_actions_taus = episode["robot"]["actions_taus"]
 
