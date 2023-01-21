@@ -52,6 +52,7 @@ class MarineNavEnv(gym.Env):
         self.timestep_penalty = -1.0
         # self.dist_reward = self.robot.compute_dist_reward_scale()
         # self.energy_penalty = self.robot.compute_penalty_matrix()
+        self.angle_penalty = -0.5
         self.collision_penalty = -50.0
         self.goal_reward = 100.0
         self.discount = 0.99
@@ -185,6 +186,15 @@ class MarineNavEnv(gym.Env):
 
         # reward agent for getting closer to the goal
         reward += dis_before-dis_after
+
+        # penalize agent when the difference of steering direction and velocity direction is too large
+        velocity = obs[:2]
+        diff_angle = 0.0
+        if np.linalg.norm(velocity) > 1e-03:
+            diff_angle = np.abs(np.arctan2(velocity[1],velocity[0]))
+
+        if diff_angle > 0.25*self.robot.sonar.angle:
+            reward += self.angle_penalty * diff_angle
 
         if self.check_collision():
             reward += self.collision_penalty
@@ -388,7 +398,8 @@ class MarineNavEnv(gym.Env):
         return np.array([v_velocity[0,0], v_velocity[1,0]])
 
     def get_velocity_test(self,x:float, y:float):
-        return np.zeros(2)
+        v = np.ones(2)
+        return v / np.linalg.norm(v)
 
     def compute_speed(self, Gamma:float, d:float):
         if d <= self.r:
