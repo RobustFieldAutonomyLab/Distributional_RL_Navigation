@@ -5,6 +5,8 @@ from stable_baselines3 import A2C
 from stable_baselines3 import DQN
 from thirdparty import QRDQN
 from thirdparty import IQNAgent
+import APF
+import BA
 import os
 import gym
 import marinenav_env.envs.marinenav_env as marinenav_env
@@ -23,14 +25,18 @@ def evaluation(first_observation, agent):
     
     while not done and length < 1000:
         action, _ = agent.predict(observation,deterministic=True)
-        observation, reward, done, _ = test_env.step(int(action))
+        observation, reward, done, info = test_env.step(int(action))
         cumulative_reward += test_env.discount ** length * reward
         length += 1
-        if length % 50 == 0:
-            print(length)
+        # if length % 50 == 0:
+        #     print(length)
 
+    res = "success!" if info["state"] == "reach goal" else "failed!" 
+    print(res)
     print("episode length: ",length)
     print("cumulative reward: ",cumulative_reward)
+
+    return test_env.episode_data()
 
 def evaluation_IQN(first_observation, agent):
     print("===== Evaluate IQN =====")
@@ -39,33 +45,66 @@ def evaluation_IQN(first_observation, agent):
     length = 0
     done = False
     
-    quantiles_data = None
-    taus_data = None
+    quantiles_data = []
+    taus_data = []
+
+    cvars = [1.0,0.7,0.4,0.1]
+    # cvars = [0.7]
 
     while not done and length < 1000:
-        action, quantiles, taus = agent.act_eval_IQN(observation,0.0,0.1)
+        action = None
+        select = 0
+        for i,cvar in enumerate(cvars):
+            a, quantiles, taus = agent.act_eval_IQN(observation,0.0,cvar)
+            if i == select:
+                action = a
+
+            if len(quantiles_data) < len(cvars):
+                quantiles_data.append(quantiles)
+                taus_data.append(taus)
+            else:
+                quantiles_data[i] = np.concatenate((quantiles_data[i],quantiles))
+                taus_data[i] = np.concatenate((taus_data[i],taus))
         
-        if quantiles_data is None:
-            quantiles_data = quantiles
-            taus_data = taus
-        else:
-            quantiles_data = np.concatenate((quantiles_data,quantiles))
-            taus_data = np.concatenate((taus_data,taus))
-        
-        observation, reward, done, _ = test_env.step(int(action))
+        observation, reward, done, info = test_env.step(int(action))
         cumulative_reward += test_env.discount ** length * reward
         length += 1
-        if length % 50 == 0:
-            print(length)
+        # if length % 50 == 0:
+        #     print(length)
 
+    res = "success!" if info["state"] == "reach goal" else "failed!" 
+    print(res)
     print("episode length: ",length)
     print("cumulative reward: ",cumulative_reward)
 
     ep_data = test_env.episode_data()
-    ep_data["robot"]["actions_quantiles"] = quantiles_data.tolist()
-    ep_data["robot"]["actions_taus"] = taus_data.tolist()
+    ep_data["robot"]["actions_cvars"] = copy.deepcopy(cvars)
+    ep_data["robot"]["actions_quantiles"] = [x.tolist() for x in quantiles_data]
+    ep_data["robot"]["actions_taus"] = [x.tolist() for x in taus_data]
 
     return ep_data
+
+def evaluation_classical(first_observation, agent):
+    print("===== Evaluation =====")
+    observation = first_observation
+    cumulative_reward = 0.0
+    length = 0
+    done = False
+    
+    while not done and length < 1000:
+        action = agent.act(observation)
+        observation, reward, done, info = test_env.step(int(action))
+        cumulative_reward += test_env.discount ** length * reward
+        length += 1
+        # if length % 50 == 0:
+        #     print(length)
+
+    res = "success!" if info["state"] == "reach goal" else "failed!" 
+    print(res)
+    print("episode length: ",length)
+    print("cumulative reward: ",cumulative_reward)
+
+    return test_env.episode_data()
 
 def reset_episode_scenario():
     current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
@@ -90,10 +129,12 @@ def reset_scenario_1():
     positions = [c+12*d1,c+6*d1,c,c+6*d2,c+12*d2]
     # positions = list(np.linspace(c-12*d,c+12*d,5))
 
-    # set a virtual vortex core
-    core = marinenav_env.Core(50.5,50.5,0,0.0)
-    test_env.cores.append(core)
-    c_centers = np.array([[core.x,core.y]])
+    # set a vortex core
+    core_1 = marinenav_env.Core(15.0,19.0,0,np.pi*10)
+    test_env.cores.append(core_1)
+    core_2 = marinenav_env.Core(19.0,15.0,1,np.pi*10)
+    test_env.cores.append(core_2)
+    c_centers = np.array([[core_1.x,core_1.y],[core_2.x,core_2.y]])
     test_env.core_centers = scipy.spatial.KDTree(c_centers)
 
     centers = None
@@ -125,14 +166,14 @@ def reset_scenario_2():
     test_env.goal = np.array([44.0,44.0])
 
     # obstacle
-    c = np.array([25.0,25.0])
-    obs = marinenav_env.Obstacle(c[0],c[1],10.0)
+    c = np.array([27.0,27.0])
+    obs = marinenav_env.Obstacle(c[0],c[1],15.0)
     test_env.obstacles.append(obs)
     centers = np.array([[obs.x,obs.y]])
     test_env.obs_centers = scipy.spatial.KDTree(centers)
 
     # reset robot
-    test_env.robot.init_theta = 0.0
+    test_env.robot.init_theta = 5*np.pi/4
     test_env.robot.init_speed = 0.0
     current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
     test_env.robot.reset_state(test_env.start[0],test_env.start[1], current_velocity=current_v)
@@ -166,6 +207,36 @@ def reset_scenario_3():
     # reset robot
     test_env.robot.init_theta = 0.0
     test_env.robot.init_speed = 0.0
+    current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
+    test_env.robot.reset_state(test_env.start[0],test_env.start[1], current_velocity=current_v)
+
+    return test_env.get_observation()
+
+def reset_scenario_4():
+    test_env.cores.clear()
+    test_env.obstacles.clear()
+
+    # set start and goal position
+    test_env.start = np.array([37.5,24.0])
+    test_env.goal = np.array([12.5,33.0])
+
+    # obstacle
+    obs_1 = marinenav_env.Obstacle(27.0,32.0,2.0)
+    test_env.obstacles.append(obs_1)
+    obs_2 = marinenav_env.Obstacle(32.5,35.0,1.0)
+    test_env.obstacles.append(obs_2)
+    centers = np.array([[obs_1.x,obs_1.y],[obs_2.x,obs_2.y]])
+    test_env.obs_centers = scipy.spatial.KDTree(centers)
+
+    # set a vortex core
+    core = marinenav_env.Core(31.0,30.0,0,np.pi*5)
+    test_env.cores.append(core)
+    c_centers = np.array([[core.x,core.y]])
+    test_env.core_centers = scipy.spatial.KDTree(c_centers)
+
+    # reset robot
+    test_env.robot.init_theta = np.pi/2
+    test_env.robot.init_speed = 1.0
     current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
     test_env.robot.reset_state(test_env.start[0],test_env.start[1], current_velocity=current_v)
 
@@ -252,11 +323,39 @@ def reset_random():
     test_env.reset_robot()
 
     return test_env.get_observation()
+
+def reset_scenario_test_APF():
+    # reset the environment
+        
+    test_env.cores.clear()
+    test_env.obstacles.clear()
+
+    # set start and goal position
+    test_env.start = np.array([10.0,10.0])
+    test_env.goal = np.array([44.0,44.0])
+
+    # obstacle
+    c = np.array([25.0,25.0])
+    obs = marinenav_env.Obstacle(c[0],c[1],10.0)
+    test_env.obstacles.append(obs)
+    centers = np.array([[obs.x,obs.y]])
+    test_env.obs_centers = scipy.spatial.KDTree(centers)
+
+    # reset robot
+    test_env.robot.init_theta = 0.0
+    test_env.robot.init_speed = 0.0
+    current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
+    test_env.robot.reset_state(test_env.start[0],test_env.start[1], current_velocity=current_v)
+
+    return test_env.get_observation()
     
 
 if __name__ == "__main__":
 
-    save_dir = "experiment_data/experiment_2022-12-23-18-02-05/seed_2"
+    # save_dir = "experiment_data/experiment_2022-12-23-18-02-05/seed_2" # IQN
+    save_dir = "experiment_data/experiment_2023-01-19-22-58-37/seed_2" # IQN with angle penalty
+    # save_dir = "experiment_data/experiment_2022-12-23-18-19-03/seed_2" # DQN
+    # save_dir = "experiment_data/experiment_2023-01-19-22-58-47/seed_2" # QR-DQN with angle penalty
     model_file = "latest_model.zip"
     eval_file = "evaluations.npz"
 
@@ -264,31 +363,43 @@ if __name__ == "__main__":
 
     test_env = ev.env
 
-    first_obs = reset_scenario_1()
+    first_obs = reset_scenario_2()
 
     ##### DQN #####
-    #DQN_agent = DQN.load(os.path.join(save_dir,model_file),print_system_info=True)
+    # DQN_agent = DQN.load(os.path.join(save_dir,model_file),print_system_info=True)
 
-    #evaluation(first_obs,DQN_agent)
+    # ep_data = evaluation(first_obs,DQN_agent)
     ##### DQN #####
 
     ##### IQN #####
-    device = "cuda:0"
+    # device = "cuda:0"
 
-    IQN_agent = IQNAgent(test_env.get_state_space_dimension(),
-                         test_env.get_action_space_dimension(),
-                         device=device,
-                         seed=2)
-    IQN_agent.load_model(save_dir,device)
+    # IQN_agent = IQNAgent(test_env.get_state_space_dimension(),
+    #                      test_env.get_action_space_dimension(),
+    #                      device=device,
+    #                      seed=2)
+    # IQN_agent.load_model(save_dir,device)
 
-    ep_data = evaluation_IQN(first_obs,IQN_agent)
+    # ep_data = evaluation_IQN(first_obs,IQN_agent)
     ##### IQN #####
 
     ##### QR-DQN #####
     # QRDQN_agent = QRDQN.load(os.path.join(save_dir,model_file),print_system_info=True)
 
-    # evaluation(first_obs,QRDQN_agent)
+    # ep_data = evaluation(first_obs,QRDQN_agent)
     ##### QR-DQN #####
+
+    ##### APF #####
+    # APF_agent = APF.APF_agent(test_env.robot.a,test_env.robot.w)
+    
+    # ep_data = evaluation_classical(first_obs,APF_agent)
+    ##### APF #####
+
+    ##### BA #####
+    BA_agent = BA.BA_agent(test_env.robot.a,test_env.robot.w)
+    
+    ep_data = evaluation_classical(first_obs,BA_agent)
+    ##### BA #####
 
     filename = "test.json"
     with open(filename,"w") as file:
@@ -296,7 +407,8 @@ if __name__ == "__main__":
 
     # test_env.save_episode("test.json")
 
-    ev_2 = env_visualizer.EnvVisualizer(draw_dist=True)
+    ev_2 = env_visualizer.EnvVisualizer()
+    # ev_2 = env_visualizer.EnvVisualizer(draw_dist=True, cvar_num=4) # for IQN only
     
     ev_2.load_episode_from_json_file("test.json")
 

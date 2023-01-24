@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 
 class APF_agent:
 
@@ -7,16 +8,14 @@ class APF_agent:
         self.k_rep = 500.0 # repulsive force constant
         self.m = 500 # robot weight (kg)
         self.d0 = 10.0 # obstacle distance threshold (m)
-        self.n = 2 # power constant of repulsive force 
+        self.n = 2 # power constant of repulsive force
+        self.min_vel = 1.0 # if velocity is lower than the threshold, mandate acceleration 
 
         self.a = a # available linear acceleration (action 1)
         self.w = w # available angular velocity (action 2)
 
     def act(self, observation):
         velocity = observation[:2]
-        if np.linalg.norm(velocity) < 1e-03:
-            velocity = np.ones(2)
-
         goal = observation[2:4]
         sonar_points = observation[4:]
 
@@ -49,7 +48,9 @@ class APF_agent:
 
         # select angular velocity action 
         F_total = F_att + F_rep
-        V_angle = np.arctan2(velocity[1],velocity[0])
+        V_angle = 0.0
+        if np.linalg.norm(velocity) > 1e-03:
+            V_angle = np.arctan2(velocity[1],velocity[0])
         F_angle = np.arctan2(F_total[1],F_total[0])
 
         diff_angle = F_angle - V_angle
@@ -62,11 +63,17 @@ class APF_agent:
         
         # select linear acceleration action
         a_total = F_total / self.m
-        V_dir = velocity / np.linalg.norm(velocity)
+        V_dir = np.array([1.0,0.0])
+        if np.linalg.norm(velocity) > 1e-03:
+            V_dir = velocity / np.linalg.norm(velocity)
         a_proj = np.dot(a_total,V_dir)
-
-        # a_idx = np.argmin(np.abs(self.a-a_proj))
-        a_idx = 2
+ 
+        a = copy.deepcopy(self.a)
+        if np.linalg.norm(velocity) < self.min_vel:
+            # if the velocity is small, mandate acceleration
+            a[a<=0.0] = -np.inf
+        a_diff = a-a_proj
+        a_idx = np.argmin(np.abs(a_diff))
 
         return a_idx * len(self.w) + w_idx
 
