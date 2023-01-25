@@ -68,6 +68,13 @@ class Robot:
         p = -0.5 * np.matrix([[scale_a,0.0],[0.0,scale_w]])
         return p
 
+    def compute_action_energy_cost(self,action):
+        # scale the a and w to [0,1]
+        a,w = self.actions[action]
+        a /= np.max(self.a)
+        w /= np.max(self.w)
+        return np.abs(a) + np.abs(w)
+
     def reset_state(self,x,y,current_velocity=np.zeros(2)):
         # only called when resetting the environment
         self.action_history.clear()
