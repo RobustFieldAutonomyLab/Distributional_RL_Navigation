@@ -162,18 +162,26 @@ def reset_scenario_2():
     test_env.obstacles.clear()
 
     # set start and goal position
-    test_env.start = np.array([10.0,10.0])
+    test_env.start = np.array([6.0,6.0])
     test_env.goal = np.array([44.0,44.0])
+
+    # set a vortex core
+    core_1 = marinenav_env.Core(15.0,19.0,0,np.pi*10)
+    test_env.cores.append(core_1)
+    core_2 = marinenav_env.Core(19.0,15.0,1,np.pi*10)
+    test_env.cores.append(core_2)
+    c_centers = np.array([[core_1.x,core_1.y],[core_2.x,core_2.y]])
+    test_env.core_centers = scipy.spatial.KDTree(c_centers)
 
     # obstacle
     c = np.array([27.0,27.0])
-    obs = marinenav_env.Obstacle(c[0],c[1],15.0)
+    obs = marinenav_env.Obstacle(c[0],c[1],10.0)
     test_env.obstacles.append(obs)
     centers = np.array([[obs.x,obs.y]])
     test_env.obs_centers = scipy.spatial.KDTree(centers)
 
     # reset robot
-    test_env.robot.init_theta = 5*np.pi/4
+    test_env.robot.init_theta = np.pi/4
     test_env.robot.init_speed = 0.0
     current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
     test_env.robot.reset_state(test_env.start[0],test_env.start[1], current_velocity=current_v)
@@ -352,9 +360,10 @@ def reset_scenario_test_APF():
 
 if __name__ == "__main__":
 
-    # save_dir = "experiment_data/experiment_2022-12-23-18-02-05/seed_2" # IQN
-    save_dir = "experiment_data/experiment_2023-01-19-22-58-37/seed_2" # IQN with angle penalty
+    save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2" # IQN
+    # save_dir = "experiment_data/experiment_2023-01-19-22-58-37/seed_2" # IQN with angle penalty
     # save_dir = "experiment_data/experiment_2022-12-23-18-19-03/seed_2" # DQN
+    # save_dir = "experiment_data/experiment_2023-01-20-19-56-05/seed_4" # DQN with angle penalty
     # save_dir = "experiment_data/experiment_2023-01-19-22-58-47/seed_2" # QR-DQN with angle penalty
     model_file = "latest_model.zip"
     eval_file = "evaluations.npz"
@@ -372,15 +381,15 @@ if __name__ == "__main__":
     ##### DQN #####
 
     ##### IQN #####
-    # device = "cuda:0"
+    device = "cuda:0"
 
-    # IQN_agent = IQNAgent(test_env.get_state_space_dimension(),
-    #                      test_env.get_action_space_dimension(),
-    #                      device=device,
-    #                      seed=2)
-    # IQN_agent.load_model(save_dir,device)
+    IQN_agent = IQNAgent(test_env.get_state_space_dimension(),
+                         test_env.get_action_space_dimension(),
+                         device=device,
+                         seed=2)
+    IQN_agent.load_model(save_dir,device)
 
-    # ep_data = evaluation_IQN(first_obs,IQN_agent)
+    ep_data = evaluation_IQN(first_obs,IQN_agent)
     ##### IQN #####
 
     ##### QR-DQN #####
@@ -396,9 +405,9 @@ if __name__ == "__main__":
     ##### APF #####
 
     ##### BA #####
-    BA_agent = BA.BA_agent(test_env.robot.a,test_env.robot.w)
+    # BA_agent = BA.BA_agent(test_env.robot.a,test_env.robot.w)
     
-    ep_data = evaluation_classical(first_obs,BA_agent)
+    # ep_data = evaluation_classical(first_obs,BA_agent)
     ##### BA #####
 
     filename = "test.json"

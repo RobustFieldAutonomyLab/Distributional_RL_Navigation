@@ -15,6 +15,7 @@ import copy
 import scipy.spatial
 import env_visualizer
 import json
+from datetime import datetime
 
 def evaluation_IQN(first_observation, agent, test_env):
     observation = first_observation
@@ -99,13 +100,36 @@ def evaluation_classical(first_observation, agent, test_env):
 
     return test_env.episode_data(), success, time, energy
 
-def experiment_1():
+def exp_setup_1(envs):
+    # keep default env settings
+    pass
+
+def exp_setup_2(envs):
+    # fix the obstacle r = 0.5, and increases num to 10
+    for env in envs:
+        env.obs_r_range = [1,1]
+        env.num_obs = 10
+
+def exp_setup_3(envs):
+    # 1. fix the obstacle r = 0.5, and increases num to 10
+    # 2. reduce the area of obstacle generation to make them more dense
+    # 3. fix the start and goal position so that obstacles lie in the line between them
+    for env in envs:
+        env.obs_r_range = [1,1]
+        env.num_obs = 10
+
+def run_experiment():
     num = 500
     agents = [IQN_agent_1,DQN_agent_1,APF_agent,BA_agent]
     names = ["IQN_agent_1","DQN_agent_1","APF_agent","BA_agent"]
     envs = [test_env_1,test_env_3,test_env_5,test_env_6]
     evaluations = [evaluation_IQN,evaluation_DQN, \
                    evaluation_classical,evaluation_classical]
+
+    dt = datetime.now()
+    timestamp = dt.strftime("%Y-%m-%d-%H-%M-%S")
+
+    exp_setup_3(envs)
 
     exp_data = {}
     for name in names:
@@ -132,14 +156,19 @@ def experiment_1():
 
             for k in range(len(agents)):
                 name = names[k]
-                rate = np.sum(exp_data[name]["success"])/(i+1)
-                avg_t = np.mean(exp_data[name]["time"])
-                avg_e = np.mean(exp_data[name]["energy"])
+                res = np.array(exp_data[name]["success"])
+                idx = np.where(res == 1)[0]
+                rate = np.sum(res)/(i+1)
+                
+                t = np.array(exp_data[name]["time"])
+                e = np.array(exp_data[name]["energy"])
+                avg_t = np.mean(t[idx])
+                avg_e = np.mean(e[idx])
                 print(f"{name} | success rate: {rate:.2f} | avg_time: {avg_t:.2f} | avg_energy: {avg_e:.2f}")
             
             print("\n")
 
-            filename = "exp_data.json"
+            filename = f"experiment_data/exp_data_{timestamp}.json"
             with open(filename,"w") as file:
                 json.dump(exp_data,file)
 
@@ -151,7 +180,7 @@ if __name__ == "__main__":
     ##### IQN #####
     test_env_1 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "experiment_data/experiment_2022-12-23-18-02-05/seed_2"
+    save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
 
     device = "cuda:0"
 
@@ -181,7 +210,7 @@ if __name__ == "__main__":
     ##### DQN #####
     test_env_3 = marinenav_env.MarineNavEnv(seed)
     
-    save_dir = "experiment_data/experiment_2022-12-23-18-19-03/seed_2"
+    save_dir = "training_data/experiment_2022-12-23-18-19-03/seed_2"
     model_file = "latest_model.zip"
 
     DQN_agent_1 = DQN.load(os.path.join(save_dir,model_file),print_system_info=False)
@@ -213,5 +242,5 @@ if __name__ == "__main__":
     
     ##### BA #####
 
-    experiment_1()
+    run_experiment()
 
