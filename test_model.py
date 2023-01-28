@@ -55,7 +55,7 @@ def evaluation_IQN(first_observation, agent):
         action = None
         select = 0
         for i,cvar in enumerate(cvars):
-            a, quantiles, taus = agent.act_eval_IQN(observation,0.0,cvar)
+            a, quantiles, taus = agent.act_eval(observation,cvar=cvar)
             if i == select:
                 action = a
 
@@ -356,15 +356,51 @@ def reset_scenario_test_APF():
     test_env.robot.reset_state(test_env.start[0],test_env.start[1], current_velocity=current_v)
 
     return test_env.get_observation()
+
+def reset_scenario_strong_adverse_current():
+    test_env.cores.clear()
+    test_env.obstacles.clear()
     
+    # set start and goal
+    test_env.start = np.array([15.0,10.0])
+    test_env.goal = np.array([45.0,35.0])
+
+    # set vortex cores data
+    core_0 = marinenav_env.Core(14.0,1.0,0,np.pi*10.0)
+    core_1 = marinenav_env.Core(10.0,18.0,0,np.pi*10.0)
+    core_2 = marinenav_env.Core(15.0,26.0,1,np.pi*10.0)
+    core_3 = marinenav_env.Core(25.0,23.0,1,np.pi*10.0)
+    core_4 = marinenav_env.Core(13.0,41.0,0,np.pi*10.0)
+    core_5 = marinenav_env.Core(40.0,22.0,0,np.pi*10.0)
+    core_6 = marinenav_env.Core(36.0,30.0,0,np.pi*8.0)
+    core_7 = marinenav_env.Core(37.0,37.0,1,np.pi*8.0)
+
+    test_env.cores = [core_0,core_1,core_2,core_3, \
+                      core_4,core_5,core_6,core_7]
+
+    centers = None
+    for core in test_env.cores:
+        if centers is None:
+            centers = np.array([[core.x,core.y]])
+        else:
+            c = np.array([[core.x,core.y]])
+            centers = np.vstack((centers,c))
+
+    # reset robot
+    test_env.robot.init_theta = 3 * np.pi / 4
+    test_env.robot.init_speed = 1.0
+    current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
+    test_env.robot.reset_state(test_env.start[0],test_env.start[1], current_velocity=current_v)
+
+    return test_env.get_observation()
 
 if __name__ == "__main__":
 
     save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2" # IQN
-    # save_dir = "experiment_data/experiment_2023-01-19-22-58-37/seed_2" # IQN with angle penalty
-    # save_dir = "experiment_data/experiment_2022-12-23-18-19-03/seed_2" # DQN
-    # save_dir = "experiment_data/experiment_2023-01-20-19-56-05/seed_4" # DQN with angle penalty
-    # save_dir = "experiment_data/experiment_2023-01-19-22-58-47/seed_2" # QR-DQN with angle penalty
+    # save_dir = "training_data/experiment_2023-01-19-22-58-37/seed_2" # IQN with angle penalty
+    # save_dir = "training_data/experiment_2022-12-23-18-19-03/seed_2" # DQN
+    # save_dir = "training_data/experiment_2023-01-20-19-56-05/seed_4" # DQN with angle penalty
+    # save_dir = "training_data/experiment_2023-01-19-22-58-47/seed_2" # QR-DQN with angle penalty
     model_file = "latest_model.zip"
     eval_file = "evaluations.npz"
 
@@ -372,7 +408,7 @@ if __name__ == "__main__":
 
     test_env = ev.env
 
-    first_obs = reset_scenario_2()
+    first_obs = reset_scenario_strong_adverse_current()
 
     ##### DQN #####
     # DQN_agent = DQN.load(os.path.join(save_dir,model_file),print_system_info=True)
