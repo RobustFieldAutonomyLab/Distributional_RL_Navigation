@@ -10,7 +10,12 @@ import json
 
 class EnvVisualizer:
 
-    def __init__(self, seed:int=0, draw_dist:bool=False, cvar_num:int=0):
+    def __init__(self, 
+                 seed:int=0, 
+                 draw_dist:bool=False, # mode 2: adding action return distributions (for IQN agent)
+                 cvar_num:int=0, # number of CVaR (only available in mode 2)
+                 draw_traj:bool=False # mode 3: only visualize final trajectories given action sequences
+                 ): 
         self.env = marinenav_env.MarineNavEnv(seed)
         self.env.reset()
         self.fig = None # figure for visualization
@@ -29,28 +34,15 @@ class EnvVisualizer:
         self.episode_actions_quantiles = None
         self.episode_actions_taus = None
 
-        self.draw_dist = draw_dist # whether to draw return distribution of actions
+        self.draw_dist = draw_dist # draw return distribution of actions
+        self.draw_traj = draw_traj # plot final trajectories
 
     def init_visualize(self):
-        self.robot_last_pos = None
-
-        x_pos = list(np.linspace(0,self.env.width,100))
-        y_pos = list(np.linspace(0,self.env.height,100))
-
-        pos_x = []
-        pos_y = []
-        arrow_x = []
-        arrow_y = []
-        for x in x_pos:
-            for y in y_pos:
-                v = self.env.get_velocity(x,y)
-                pos_x.append(x)
-                pos_y.append(y)
-                arrow_x.append(v[0])
-                arrow_y.append(v[1])
         
         # initialize subplot for the map, robot state and sensor measurments
-        if self.draw_dist:
+        if self.draw_traj:
+            self.fig, self.axis_graph = plt.subplots(figsize=(16,16))
+        elif self.draw_dist:
             assert self.cvar_num > 0, "cvar_num should be greater than 0 if draw_dist"
             self.fig = plt.figure(figsize=(self.cvar_num*8+24,16))
             spec = self.fig.add_gridspec(5,3+self.cvar_num)
@@ -68,8 +60,29 @@ class EnvVisualizer:
             self.axis_sonar = self.fig.add_subplot(spec[1:3,2])
             self.axis_dvl = self.fig.add_subplot(spec[3:,2])
         
+        self.robot_last_pos = None
+
         # plot current velocity in the map
-        self.axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y)
+        x_pos = list(np.linspace(0,self.env.width,100))
+        y_pos = list(np.linspace(0,self.env.height,100))
+
+        pos_x = []
+        pos_y = []
+        arrow_x = []
+        arrow_y = []
+        speeds = np.zeros((len(x_pos),len(y_pos)))
+        for m,x in enumerate(x_pos):
+            for n,y in enumerate(y_pos):
+                v = self.env.get_velocity(x,y)
+                speed = np.linalg.norm(v)
+                pos_x.append(x)
+                pos_y.append(y)
+                arrow_x.append(v[0])
+                arrow_y.append(v[1])
+                speeds[n,m] = speed
+
+        self.axis_graph.contourf(x_pos,y_pos,speeds,cmap='Blues')
+        self.axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y, width=0.001)
 
         # plot obstacles in the map
         for obs in self.env.obstacles:
@@ -389,3 +402,39 @@ class EnvVisualizer:
         self.init_visualize()
 
         self.visualize_control(self.episode_actions)
+
+    def draw_trajectory(self,
+                        only_ep_actions:bool=True, # only draw the resulting trajectory of actions in episode data 
+                        all_actions:dict=None # otherwise, draw all trajectories from given action sequences
+                        ):
+        for plot in self.robot_traj_plot:
+            plot[0].remove()
+        self.robot_traj_plot.clear()
+        
+        self.init_visualize()
+
+        if only_ep_actions:
+            all_actions = dict(ep_agent=self.episode_actions)
+
+        trajs = []
+        for actions in all_actions.values():
+            traj = None
+            current_v = self.env.get_velocity(self.env.start[0],self.env.start[1])
+            self.env.robot.reset_state(self.env.start[0],self.env.start[1], current_velocity=current_v)
+            for a in actions:
+                for _ in range(self.env.robot.N):
+                    current_velocity = self.env.get_velocity(self.env.robot.x, self.env.robot.y)
+                    self.env.robot.update_state(a,current_velocity)
+                    curr = np.array([[self.env.robot.x, self.env.robot.y]])
+                    if traj is None:
+                        traj = curr
+                    else:
+                        traj = np.concatenate((traj,curr))
+            trajs.append(traj)
+
+        for i, l in enumerate(all_actions.keys()):
+            traj = trajs[i]
+            self.axis_graph.plot(traj[:,0],traj[:,1],label=l,linewidth=3)
+
+        self.axis_graph.legend()
+        plt.show()

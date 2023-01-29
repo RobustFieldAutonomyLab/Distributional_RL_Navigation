@@ -365,15 +365,15 @@ def reset_scenario_strong_adverse_current():
     test_env.start = np.array([15.0,10.0])
     test_env.goal = np.array([45.0,35.0])
 
-    # set vortex cores data
+    # set vortex cores
     core_0 = marinenav_env.Core(14.0,1.0,0,np.pi*10.0)
-    core_1 = marinenav_env.Core(10.0,18.0,0,np.pi*10.0)
-    core_2 = marinenav_env.Core(15.0,26.0,1,np.pi*10.0)
+    core_1 = marinenav_env.Core(10.0,18.0,0,np.pi*7.0)
+    core_2 = marinenav_env.Core(15.0,26.0,1,np.pi*8.0)
     core_3 = marinenav_env.Core(25.0,23.0,1,np.pi*10.0)
-    core_4 = marinenav_env.Core(13.0,41.0,0,np.pi*10.0)
-    core_5 = marinenav_env.Core(40.0,22.0,0,np.pi*10.0)
-    core_6 = marinenav_env.Core(36.0,30.0,0,np.pi*8.0)
-    core_7 = marinenav_env.Core(37.0,37.0,1,np.pi*8.0)
+    core_4 = marinenav_env.Core(13.0,41.0,0,np.pi*8.0)
+    core_5 = marinenav_env.Core(40.0,22.0,0,np.pi*8.0)
+    core_6 = marinenav_env.Core(36.0,30.0,0,np.pi*7.0)
+    core_7 = marinenav_env.Core(37.0,37.0,1,np.pi*6.0)
 
     test_env.cores = [core_0,core_1,core_2,core_3, \
                       core_4,core_5,core_6,core_7]
@@ -385,6 +385,29 @@ def reset_scenario_strong_adverse_current():
         else:
             c = np.array([[core.x,core.y]])
             centers = np.vstack((centers,c))
+    
+    if centers is not None:
+        test_env.core_centers = scipy.spatial.KDTree(centers)
+
+    # set obstacles
+    obs_1 = marinenav_env.Obstacle(20.0,36.0,1.5)
+    obs_2 = marinenav_env.Obstacle(35.0,19.0,1.5)
+    obs_3 = marinenav_env.Obstacle(8.0,25.0,1.5)
+    obs_4 = marinenav_env.Obstacle(30,33.0,1.5)
+
+    test_env.obstacles = [obs_1,obs_2,obs_3,obs_4]
+
+    centers = None
+    for obs in test_env.obstacles:
+        if centers is None:
+            centers = np.array([[obs.x,obs.y]])
+        else:
+            c = np.array([[obs.x,obs.y]])
+            centers = np.vstack((centers,c))
+    
+    # KDTree storing obstacle center positions
+    if centers is not None: 
+        test_env.obs_centers = scipy.spatial.KDTree(centers)
 
     # reset robot
     test_env.robot.init_theta = 3 * np.pi / 4
@@ -417,15 +440,15 @@ if __name__ == "__main__":
     ##### DQN #####
 
     ##### IQN #####
-    device = "cuda:0"
+    # device = "cuda:0"
 
-    IQN_agent = IQNAgent(test_env.get_state_space_dimension(),
-                         test_env.get_action_space_dimension(),
-                         device=device,
-                         seed=2)
-    IQN_agent.load_model(save_dir,device)
+    # IQN_agent = IQNAgent(test_env.get_state_space_dimension(),
+    #                      test_env.get_action_space_dimension(),
+    #                      device=device,
+    #                      seed=2)
+    # IQN_agent.load_model(save_dir,device)
 
-    ep_data = evaluation_IQN(first_obs,IQN_agent)
+    # ep_data = evaluation_IQN(first_obs,IQN_agent)
     ##### IQN #####
 
     ##### QR-DQN #####
@@ -435,9 +458,9 @@ if __name__ == "__main__":
     ##### QR-DQN #####
 
     ##### APF #####
-    # APF_agent = APF.APF_agent(test_env.robot.a,test_env.robot.w)
+    APF_agent = APF.APF_agent(test_env.robot.a,test_env.robot.w)
     
-    # ep_data = evaluation_classical(first_obs,APF_agent)
+    ep_data = evaluation_classical(first_obs,APF_agent)
     ##### APF #####
 
     ##### BA #####
@@ -452,10 +475,11 @@ if __name__ == "__main__":
 
     # test_env.save_episode("test.json")
 
-    ev_2 = env_visualizer.EnvVisualizer()
+    ev_2 = env_visualizer.EnvVisualizer(draw_traj=True)
     # ev_2 = env_visualizer.EnvVisualizer(draw_dist=True, cvar_num=4) # for IQN only
     
     ev_2.load_episode_from_json_file("test.json")
 
-    ev_2.play_episode()
+    # Draw trajectorys
+    ev_2.draw_trajectory()
 

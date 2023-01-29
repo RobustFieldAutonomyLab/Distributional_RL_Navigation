@@ -189,8 +189,8 @@ class IQNAgent():
         
         return action
 
-    def act_eval_IQN(self, state, eps, cvar=1.0):
-        """Returns action return quantiles and action decision
+    def act_eval(self, state, eps=0.0, cvar=1.0):
+        """Returns action index and quantiles 
         Params
         ======
             frame: to adjust epsilon
@@ -210,6 +210,29 @@ class IQNAgent():
             action = random.choice(np.arange(self.action_size))
         
         return action, quantiles.cpu().data.numpy(), taus.cpu().data.numpy()
+
+    def act_adaptive_eval(self, state, eps=0.0):
+        """adptively tune the CVaR value, compute action index and quantiles
+        Params
+        ======
+            frame: to adjust epsilon
+            state (array_like): current state
+        """
+        
+        # scale CVaR value according to the closest distance to obstacles
+        sonar_points = state[4:]
+        closest_d = 10.0
+        for i in range(0,len(sonar_points),2):
+            x = sonar_points[i]
+            y = sonar_points[i+1]
+
+            if x == 0 and y == 0:
+                continue
+
+            closest_d = min(closest_d, np.linalg.norm(sonar_points[i:i+2]))
+        cvar = closest_d / 10.0
+
+        return self.act_eval(state, eps, cvar)
 
     def train(self, experiences):
         """Update value parameters using given batch of experience tuples

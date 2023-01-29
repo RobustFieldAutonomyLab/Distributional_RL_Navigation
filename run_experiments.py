@@ -17,7 +17,7 @@ import env_visualizer
 import json
 from datetime import datetime
 
-def evaluation_IQN(first_observation, agent, test_env):
+def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False):
     observation = first_observation
     cumulative_reward = 0.0
     length = 0
@@ -33,7 +33,11 @@ def evaluation_IQN(first_observation, agent, test_env):
         action = None
         select = 0
         for i,cvar in enumerate(cvars):
-            a, quantiles, taus = agent.act_eval_IQN(observation,0.0,cvar)
+            if adaptive:
+                a, quantiles, taus = agent.act_adaptive_eval(observation)
+            else:
+                a, quantiles, taus = agent.act_eval(observation,cvar=cvar)
+
             if i == select:
                 action = a
 
@@ -118,18 +122,84 @@ def exp_setup_3(envs):
         env.obs_r_range = [1,1]
         env.num_obs = 10
 
+def exp_setup_4(envs):
+    # Demonstrate that RL agents are clearly better in adverse flow field
+    observations = []
+
+    for test_env in envs:
+        test_env.cores.clear()
+        test_env.obstacles.clear()
+        
+        # set start and goal
+        test_env.start = np.array([15.0,10.0])
+        test_env.goal = np.array([45.0,35.0])
+
+        # set vortex cores data
+        core_0 = marinenav_env.Core(14.0,1.0,0,np.pi*10.0)
+        core_1 = marinenav_env.Core(10.0,18.0,0,np.pi*7.0)
+        core_2 = marinenav_env.Core(15.0,26.0,1,np.pi*8.0)
+        core_3 = marinenav_env.Core(25.0,23.0,1,np.pi*10.0)
+        core_4 = marinenav_env.Core(13.0,41.0,0,np.pi*8.0)
+        core_5 = marinenav_env.Core(40.0,22.0,0,np.pi*8.0)
+        core_6 = marinenav_env.Core(36.0,30.0,0,np.pi*7.0)
+        core_7 = marinenav_env.Core(37.0,37.0,1,np.pi*6.0)
+
+        test_env.cores = [core_0,core_1,core_2,core_3, \
+                        core_4,core_5,core_6,core_7]
+
+        centers = None
+        for core in test_env.cores:
+            if centers is None:
+                centers = np.array([[core.x,core.y]])
+            else:
+                c = np.array([[core.x,core.y]])
+                centers = np.vstack((centers,c))
+        
+        if centers is not None:
+            test_env.core_centers = scipy.spatial.KDTree(centers)
+
+        # set obstacles
+        obs_1 = marinenav_env.Obstacle(20.0,36.0,1.5)
+        obs_2 = marinenav_env.Obstacle(35.0,19.0,1.5)
+        obs_3 = marinenav_env.Obstacle(8.0,25.0,1.5)
+        obs_4 = marinenav_env.Obstacle(30,33.0,1.5)
+
+        test_env.obstacles = [obs_1,obs_2,obs_3,obs_4]
+
+        centers = None
+        for obs in test_env.obstacles:
+            if centers is None:
+                centers = np.array([[obs.x,obs.y]])
+            else:
+                c = np.array([[obs.x,obs.y]])
+                centers = np.vstack((centers,c))
+        
+        # KDTree storing obstacle center positions
+        if centers is not None: 
+            test_env.obs_centers = scipy.spatial.KDTree(centers)
+
+        # reset robot
+        test_env.robot.init_theta = 3 * np.pi / 4
+        test_env.robot.init_speed = 1.0
+        current_v = test_env.get_velocity(test_env.start[0],test_env.start[1])
+        test_env.robot.reset_state(test_env.start[0],test_env.start[1], current_velocity=current_v)
+
+        observations.append(test_env.get_observation())
+
+    return observations
+
 def run_experiment():
-    num = 500
-    agents = [IQN_agent_1,DQN_agent_1,APF_agent,BA_agent]
-    names = ["IQN_agent_1","DQN_agent_1","APF_agent","BA_agent"]
-    envs = [test_env_1,test_env_3,test_env_5,test_env_6]
-    evaluations = [evaluation_IQN,evaluation_DQN, \
+    num = 1
+    agents = [IQN_agent_0,IQN_agent_1,DQN_agent_1,APF_agent,BA_agent]
+    names = ["adaptive_IQN","IQN","DQN","APF","BA"]
+    envs = [test_env_0,test_env_1,test_env_3,test_env_5,test_env_6]
+    evaluations = [evaluation_IQN,evaluation_IQN,evaluation_DQN, \
                    evaluation_classical,evaluation_classical]
 
     dt = datetime.now()
     timestamp = dt.strftime("%Y-%m-%d-%H-%M-%S")
 
-    exp_setup_3(envs)
+    observations = exp_setup_4(envs)
 
     exp_data = {}
     for name in names:
@@ -143,8 +213,14 @@ def run_experiment():
             evaluation = evaluations[j]
             name = names[j]
             
-            obs = env.reset()
-            ep_data, success, time, energy = evaluation(obs,agent,env)
+            # obs = env.reset()
+            obs = observations[j]
+            
+            if name == "adaptive_IQN":
+                ep_data, success, time, energy = evaluation(obs,agent,env,adaptive=True)
+            else:
+                ep_data, success, time, energy = evaluation(obs,agent,env)
+            
             exp_data[name]["ep_data"].append(ep_data)
             exp_data[name]["success"].append(success)
             exp_data[name]["time"].append(time)
@@ -172,12 +248,25 @@ def run_experiment():
             with open(filename,"w") as file:
                 json.dump(exp_data,file)
 
-    
-
 if __name__ == "__main__":
     seed = 15 # PRNG seed for all testing envs
+
+    ##### adaptive IQN #####
+    test_env_0 = marinenav_env.MarineNavEnv(seed)
+
+    save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
+
+    device = "cuda:0"
+
+    IQN_agent_0 = IQNAgent(test_env_0.get_state_space_dimension(),
+                         test_env_0.get_action_space_dimension(),
+                         device=device,
+                         seed=2)
+    IQN_agent_0.load_model(save_dir,device)
+    ##### adaptive IQN #####
     
-    ##### IQN #####
+
+    ##### IQN cvar = 1.0 #####
     test_env_1 = marinenav_env.MarineNavEnv(seed)
 
     save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
@@ -189,22 +278,7 @@ if __name__ == "__main__":
                          device=device,
                          seed=2)
     IQN_agent_1.load_model(save_dir,device)
-    ##### IQN #####
-
-
-    # ##### IQN with angle penalty #####
-    # test_env_2 = marinenav_env.MarineNavEnv(seed)
-
-    # save_dir = "experiment_data/experiment_2023-01-19-22-58-37/seed_2"
-
-    # device = "cuda:0"
-
-    # IQN_agent_2 = IQNAgent(test_env_2.get_state_space_dimension(),
-    #                      test_env_2.get_action_space_dimension(),
-    #                      device=device,
-    #                      seed=2)
-    # IQN_agent_2.load_model(save_dir,device)
-    # ##### IQN with angle penalty #####
+    ##### IQN cvar = 1.0 #####
 
 
     ##### DQN #####
@@ -217,21 +291,10 @@ if __name__ == "__main__":
     ##### DQN #####
 
 
-    # ##### DQN with angle penalty #####
-    # test_env_4 = marinenav_env.MarineNavEnv(seed)
-
-    # save_dir = "experiment_data/experiment_2023-01-20-19-56-05/seed_2"
-    # model_file = "latest_model.zip"
-
-    # DQN_agent_2 = DQN.load(os.path.join(save_dir,model_file),print_system_info=False)
-    # ##### DQN with angle penalty #####
-
-
     ##### APF #####
     test_env_5 = marinenav_env.MarineNavEnv(seed)
     
     APF_agent = APF.APF_agent(test_env_5.robot.a,test_env_5.robot.w)
-
     ##### APF #####
 
 
@@ -239,7 +302,6 @@ if __name__ == "__main__":
     test_env_6 = marinenav_env.MarineNavEnv(seed)
     
     BA_agent = BA.BA_agent(test_env_6.robot.a,test_env_6.robot.w)
-    
     ##### BA #####
 
     run_experiment()
