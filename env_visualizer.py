@@ -79,22 +79,27 @@ class EnvVisualizer:
                 pos_y.append(y)
                 arrow_x.append(v[0])
                 arrow_y.append(v[1])
-                speeds[n,m] = speed
+                speeds[n,m] = np.log(speed)
 
         self.axis_graph.contourf(x_pos,y_pos,speeds,cmap='Blues')
         self.axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y, width=0.001)
 
         # plot obstacles in the map
+        l = True
         for obs in self.env.obstacles:
-            self.axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r))
+            if l:
+                self.axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r,color='m',label="obstacle"))
+                l = False
+            else:
+                self.axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r,color='m'))
 
         self.axis_graph.set_aspect('equal')
         self.axis_graph.set_xlim([0.0,self.env.width])
         self.axis_graph.set_ylim([0.0,self.env.height])
 
         # plot start and goal state
-        self.axis_graph.scatter(self.env.start[0],self.env.start[1],marker="o",color="r",s=80,zorder=6)
-        self.axis_graph.scatter(self.env.goal[0],self.env.goal[1],marker="*",color="b",s=200,zorder=6)
+        self.axis_graph.scatter(self.env.start[0],self.env.start[1],marker="o",color="yellow",s=160,zorder=6,label="start")
+        self.axis_graph.scatter(self.env.goal[0],self.env.goal[1],marker="*",color="yellow",s=500,zorder=6,label="goal")
     
     def plot_robot(self):
         if self.robot_plot != None:
@@ -432,9 +437,18 @@ class EnvVisualizer:
                         traj = np.concatenate((traj,curr))
             trajs.append(traj)
 
+        colors = ['r','lime','tab:orange']
+        styles = ['solid','dashed','dashdot']
+
         for i, l in enumerate(all_actions.keys()):
             traj = trajs[i]
-            self.axis_graph.plot(traj[:,0],traj[:,1],label=l,linewidth=3)
+            self.axis_graph.plot(traj[:,0],traj[:,1],label=l,linewidth=3,zorder=5-i,color=colors[i],linestyle=styles[i])
 
-        self.axis_graph.legend()
+        mpl.rcParams["font.size"]=15
+        mpl.rcParams["legend.framealpha"]=0.3
+        self.axis_graph.legend(loc='upper left',bbox_to_anchor=(0.35,1.0))
+        self.axis_graph.set_xlim([5,50])
+        self.axis_graph.set_ylim([5,50])
+        self.axis_graph.set_xticks([])
+        self.axis_graph.set_yticks([])
         plt.show()
