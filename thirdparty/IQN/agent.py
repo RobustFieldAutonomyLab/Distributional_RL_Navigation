@@ -74,9 +74,11 @@ class IQNAgent():
 
         # Evaluation data
         self.eval_timesteps = []
-        self.eval_ep_rewards = []
-        self.eval_ep_lengths = []
-        self.eval_ep_data = []
+        self.eval_actions = []
+        self.eval_rewards = []
+        self.eval_successes = []
+        self.eval_times = []
+        self.eval_energies = []
 
     def load_model(self,path,device="cpu"):
         # load trained IQN models
@@ -88,6 +90,7 @@ class IQNAgent():
               total_timesteps,
               train_env,
               eval_env,
+              eval_config,
               eval_freq,
               eval_log_path,
               verbose=True):
@@ -130,8 +133,14 @@ class IQNAgent():
 
                 # Evaluate the target model every eval_freq time steps
                 if self.learning_timestep % eval_freq == 0:
-                    # evaluate at risk neutral level 
-                    self.evaluation(eval_env,eval_log_path=eval_log_path)
+                    # 1. Evaluate greedy policy (CVaR = 1.0)  
+                    self.evaluation(eval_env,eval_config=eval_config,eval_log_path=eval_log_path)
+                    
+                    # 2. Evaluate adpative CVaR policy
+                    self.evaluation(eval_env,eval_config=eval_config,greedy=False,eval_log_path=eval_log_path)
+
+                    # save the latest IQN model
+                    self.qnetwork_local.save(eval_log_path)
 
                 self.learning_timestep += 1
 
@@ -221,6 +230,7 @@ class IQNAgent():
         
         # scale CVaR value according to the closest distance to obstacles
         sonar_points = state[4:]
+        thres = 5.0
         closest_d = 10.0
         for i in range(0,len(sonar_points),2):
             x = sonar_points[i]
@@ -230,7 +240,10 @@ class IQNAgent():
                 continue
 
             closest_d = min(closest_d, np.linalg.norm(sonar_points[i:i+2]))
-        cvar = closest_d / 10.0
+        
+        cvar = 1.0
+        if closest_d < thres:
+            cvar = closest_d / thres 
 
         return self.act_eval(state, eps, cvar)
 
@@ -284,48 +297,84 @@ class IQNAgent():
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
             target_param.data.copy_(self.TAU * local_param.data + (1.0 - self.TAU) * target_param.data)
 
-    def evaluation(self,eval_env,cvar=1.0,eval_log_path=None):
+    def evaluation(self,
+                   eval_env,
+                   eval_config,
+                   greedy=True,
+                   eval_log_path=None):
         """Evaluate performance of the agent
         Params
         ======
             eval_env (gym compatible env): evaluation environment
-            cvar (float): CVaR value
+            eval_config: eval envs config file
         """
-        observation = eval_env.reset()
-        cumulative_reward = 0.0
-        length = 0
-        done = False
+        action_data = []
+        reward_data = []
+        success_data = []
+        time_data = []
+        energy_data = []
         
-        while not done and length < 1000:
-            action = self.act(observation,0.0,cvar)
-            observation, reward, done, _ = eval_env.step(action)
-            cumulative_reward += eval_env.discount ** length * reward
-            length += 1
-            # if length % 50 == 0:
-            #     print(length)
+        for config in eval_config.values():
+            observation = eval_env.reset_with_eval_config(config)
+            actions = []
+            cumulative_reward = 0.0
+            length = 0
+            energy = 0.0
+            done = False
+            
+            while not done and length < 1000:
+                if greedy:
+                    action,_,_ = self.act_eval(observation)
+                else:
+                    action,_,_ = self.act_adaptive_eval(observation)
+                observation, reward, done, info = eval_env.step(action)
+                cumulative_reward += eval_env.discount ** length * reward
+                length += 1
+                energy += eval_env.robot.compute_action_energy_cost(int(action))
+                actions.append(int(action))
 
-        print("++++++++ Evaluation info ++++++++")
-        print("Episode length: ",length)
-        print("Cumulative reward: ",cumulative_reward)
-        print("++++++++ Evaluation info ++++++++\n")
+            success = True if info["state"] == "reach goal" else False
+            time = eval_env.robot.dt * eval_env.robot.N * length
+
+            action_data.append(actions)
+            reward_data.append(cumulative_reward)
+            success_data.append(success)
+            time_data.append(time)
+            energy_data.append(energy)
+        
+        avg_r = np.mean(reward_data)
+        success_rate = np.sum(success_data)/len(success_data)
+        avg_t = np.mean(time_data)
+        avg_e = np.mean(energy_data)
+
+        policy = "greedy" if greedy else "adaptive"
+        print(f"++++++++ Evaluation info ({policy} IQN) ++++++++")
+        print(f"Avg cumulative reward: {avg_r:.2f}")
+        print(f"Success rate: {success_rate:.2f}")
+        print(f"Avg time: {avg_t:.2f}")
+        print(f"Avg energy: {avg_e:.2f}")
+        print(f"++++++++ Evaluation info ({policy} IQN) ++++++++\n")
 
         self.eval_timesteps.append(self.current_timestep)
-        self.eval_ep_rewards.append(cumulative_reward)
-        self.eval_ep_lengths.append(length)
-        self.eval_ep_data.append(eval_env.episode_data())
+        self.eval_actions.append(action_data)
+        self.eval_rewards.append(reward_data)
+        self.eval_successes.append(success_data)
+        self.eval_times.append(time_data)
+        self.eval_energies.append(energy_data)
 
         if eval_log_path is not None:
+            filename = "greedy_evaluations.npz" if greedy else "adaptive_evaluations.npz"
+            
             # save evaluation data
             np.savez(
-                os.path.join(eval_log_path,"evaluations.npz"),
+                os.path.join(eval_log_path,filename),
                 timesteps=self.eval_timesteps,
-                episode_rewards=self.eval_ep_rewards,
-                episode_lengths=self.eval_ep_lengths,
-                episode_data=self.eval_ep_data
+                actions=self.eval_actions,
+                rewards=self.eval_rewards,
+                successes=self.eval_successes,
+                times=self.eval_times,
+                energies=self.eval_energies
             )
-
-            # save the latest IQN model
-            self.qnetwork_local.save(eval_log_path)
 
 
 def calculate_huber_loss(td_errors, k=1.0):

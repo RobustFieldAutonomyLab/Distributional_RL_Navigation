@@ -52,7 +52,7 @@ class MarineNavEnv(gym.Env):
         self.timestep_penalty = -1.0
         # self.dist_reward = self.robot.compute_dist_reward_scale()
         # self.energy_penalty = self.robot.compute_penalty_matrix()
-        self.angle_penalty = -0.5
+        # self.angle_penalty = -0.5
         self.collision_penalty = -50.0
         self.goal_reward = 100.0
         self.discount = 0.99
@@ -187,14 +187,14 @@ class MarineNavEnv(gym.Env):
         # reward agent for getting closer to the goal
         reward += dis_before-dis_after
 
-        # penalize agent when the difference of steering direction and velocity direction is too large
-        velocity = obs[:2]
-        diff_angle = 0.0
-        if np.linalg.norm(velocity) > 1e-03:
-            diff_angle = np.abs(np.arctan2(velocity[1],velocity[0]))
+        # # penalize agent when the difference of steering direction and velocity direction is too large
+        # velocity = obs[:2]
+        # diff_angle = 0.0
+        # if np.linalg.norm(velocity) > 1e-03:
+        #     diff_angle = np.abs(np.arctan2(velocity[1],velocity[0]))
 
-        if diff_angle > 0.25*self.robot.sonar.angle:
-            reward += self.angle_penalty * diff_angle
+        # if diff_angle > 0.25*self.robot.sonar.angle:
+        #     reward += self.angle_penalty * diff_angle
 
         if self.check_collision():
             reward += self.collision_penalty
@@ -405,7 +405,95 @@ class MarineNavEnv(gym.Env):
         if d <= self.r:
             return Gamma / (2*np.pi*self.r*self.r) * d
         else:
-            return Gamma / (2*np.pi*d)          
+            return Gamma / (2*np.pi*d)
+
+    def reset_with_eval_config(self,eval_config):
+        # load env config
+        self.sd = eval_config["env"]["seed"]
+        self.width = eval_config["env"]["width"]
+        self.height = eval_config["env"]["height"]
+        self.r = eval_config["env"]["r"]
+        self.v_rel_max = eval_config["env"]["v_rel_max"]
+        self.p = eval_config["env"]["p"]
+        self.v_range = copy.deepcopy(eval_config["env"]["v_range"])
+        self.obs_r_range = copy.deepcopy(eval_config["env"]["obs_r_range"])
+        self.clear_r = eval_config["env"]["clear_r"]
+        self.start = np.array(eval_config["env"]["start"])
+        self.goal = np.array(eval_config["env"]["goal"])
+        self.goal_dis = eval_config["env"]["goal_dis"]
+        self.timestep_penalty = eval_config["env"]["timestep_penalty"]
+        self.collision_penalty = eval_config["env"]["collision_penalty"]
+        self.goal_reward = eval_config["env"]["goal_reward"]
+        self.discount = eval_config["env"]["discount"]
+
+        # load vortex cores
+        self.cores.clear()
+        centers = None
+        for i in range(len(eval_config["env"]["cores"]["positions"])):
+            center = eval_config["env"]["cores"]["positions"][i]
+            clockwise = eval_config["env"]["cores"]["clockwise"][i]
+            Gamma = eval_config["env"]["cores"]["Gamma"][i]
+            core = Core(center[0],center[1],clockwise,Gamma)
+            self.cores.append(core)
+            if centers is None:
+                centers = np.array([[core.x,core.y]])
+            else:
+                c = np.array([[core.x,core.y]])
+                centers = np.vstack((centers,c))
+        
+        if centers is not None:
+            self.core_centers = scipy.spatial.KDTree(centers)
+
+        # load obstacles
+        self.obstacles.clear()
+        centers = None
+        for i in range(len(eval_config["env"]["obstacles"]["positions"])):
+            center = eval_config["env"]["obstacles"]["positions"][i]
+            r = eval_config["env"]["obstacles"]["r"][i]
+            obs = Obstacle(center[0],center[1],r)
+            self.obstacles.append(obs)
+            if centers is None:
+                centers = np.array([[obs.x,obs.y]])
+            else:
+                c = np.array([[obs.x,obs.y]])
+                centers = np.vstack((centers,c))
+
+        if centers is not None:
+            self.obs_centers = scipy.spatial.KDTree(centers)
+
+        # load robot config
+        self.robot.dt = eval_config["robot"]["dt"]
+        self.robot.N = eval_config["robot"]["N"]
+        self.robot.length = eval_config["robot"]["length"]
+        self.robot.width = eval_config["robot"]["width"]
+        self.robot.r = eval_config["robot"]["r"]
+        self.robot.max_speed = eval_config["robot"]["max_speed"]
+        self.robot.a = np.array(eval_config["robot"]["a"])
+        self.robot.w = np.array(eval_config["robot"]["w"])
+        self.robot.compute_k()
+        self.robot.compute_actions()
+        self.robot.init_theta = eval_config["robot"]["init_theta"]
+        self.robot.init_speed = eval_config["robot"]["init_speed"]
+
+        # load sonar config
+        self.robot.sonar.range = eval_config["robot"]["sonar"]["range"]
+        self.robot.sonar.angle = eval_config["robot"]["sonar"]["angle"]
+        self.robot.sonar.num_beams = eval_config["robot"]["sonar"]["num_beams"]
+        self.robot.sonar.compute_phi()
+        self.robot.sonar.compute_beam_angles()
+
+        # update env action and observation space
+        self.action_space = gym.spaces.Discrete(self.robot.compute_actions_dimension())
+        obs_len = 2 + 2 + 2 * self.robot.sonar.num_beams
+        self.observation_space = gym.spaces.Box(low = -np.inf * np.ones(obs_len), \
+                                                    high = np.inf * np.ones(obs_len), \
+                                                    dtype = np.float32)
+
+        # reset robot state
+        current_v = self.get_velocity(self.start[0],self.start[1])
+        self.robot.reset_state(self.start[0],self.start[1], current_velocity=current_v)
+
+        return self.get_observation()          
 
     def episode_data(self):
         episode = {}
@@ -426,6 +514,7 @@ class MarineNavEnv(gym.Env):
         episode["env"]["goal_dis"] = self.goal_dis
         episode["env"]["timestep_penalty"] = self.timestep_penalty
         # episode["env"]["energy_penalty"] = self.energy_penalty.tolist()
+        # episode["env"]["angle_penalty"] = self.angle_penalty
         episode["env"]["collision_penalty"] = self.collision_penalty
         episode["env"]["goal_reward"] = self.goal_reward
         episode["env"]["discount"] = self.discount

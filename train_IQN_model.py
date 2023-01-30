@@ -68,12 +68,16 @@ def params_dashboard(params):
     print("eval_freq: ",params["eval_freq"])
     print("\n")
 
-def run_trial(device,params):
+def run_trial(device,params,eval_config):
 
     exp_dir = os.path.join(params["save_dir"],
                            "experiment_"+params["experiment_time"],
                            "seed_"+str(params["seed"]))
     os.makedirs(exp_dir)
+
+    eval_config_file = os.path.join(exp_dir,"eval_config.json")
+    with open(eval_config_file, "w+") as f:
+        json.dump(eval_config, f)
 
     param_file = os.path.join(exp_dir,"trial_config.json")
     with open(param_file, 'w+') as outfile:
@@ -90,6 +94,7 @@ def run_trial(device,params):
     model.learn(total_timesteps=params["total_timesteps"],
                 train_env=train_env,
                 eval_env=eval_env,
+                eval_config=eval_config,
                 eval_freq=params["eval_freq"],
                 eval_log_path=exp_dir)
 
@@ -105,15 +110,23 @@ if __name__ == "__main__":
     dt = datetime.now()
     timestamp = dt.strftime("%Y-%m-%d-%H-%M-%S")
 
+    # create and save 30 randomly generated evaluation environments config
+    eval_config = {}
+    env = gym.make('marinenav_env:marinenav_env-v0',seed=348)
+    print("Creating 30 evaluation environments\n")
+    for i in range(30):
+        env.reset()
+        eval_config[f"env_{i}"] = env.episode_data()
+
     if args.num_procs == 1:
         for param in trial_param_list:
             param["experiment_time"]=timestamp
-            run_trial(args.device,param)
+            run_trial(args.device,param,eval_config)
     else:
         with Pool(processes=args.num_procs) as pool:
             for param in trial_param_list:
                 param["experiment_time"]=timestamp
-                pool.apply_async(run_trial,(args.device,param,))
+                pool.apply_async(run_trial,(args.device,param,eval_config))
             
             pool.close()
             pool.join()
