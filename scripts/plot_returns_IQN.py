@@ -5,25 +5,33 @@ import os
 
 if __name__ == "__main__":
     first = True
-    for seed in [2,3,4,5,6]:
-        data_dir = "../experiment_data/experiment_2022-12-23-18-02-05"
-        seed_dir = "seed_"+str(seed)
-        eval_file = "evaluations.npz"
-        evals = np.load(os.path.join(data_dir,seed_dir,eval_file))
+    seed = 3
+    # data_dir = "../training_data/training_2023-01-31-21-57-02" # IQN
+    data_dir = "../training_data/training_2023-01-31-22-24-24" # DQN
+    seed_dir = "seed_"+str(seed)
+    eval_agent = "greedy"
 
-        if first:
-            timesteps = evals['timesteps']
-            returns = evals['episode_rewards']
-            first = False
-        else:
-            returns = np.vstack((returns,evals['episode_rewards']))
-
-    fig, ax = plt.subplots()
-
-    mean_line = np.mean(returns,axis=0)
-    yerr = np.std(returns,axis=0) / np.sqrt(np.shape(returns)[0])
+    fig, ((ax_rewards,ax_success_rate),(ax_times,ax_energies)) = plt.subplots(2,2)
     
-    ax.plot(timesteps,mean_line,c="b")
-    ax.fill_between(timesteps,mean_line+yerr,mean_line-yerr,alpha=0.2)
+    # eval_data = np.load(os.path.join(data_dir,seed_dir,f"{eval_agent}_evaluations.npz")) # IQN
+    eval_data = np.load(os.path.join(data_dir,seed_dir,"evaluations.npz")) # DQN
+
+    timesteps = []
+    rewards = []
+    success_rates = []
+    times = []
+    energies = []
+    for i in range(len(eval_data['timesteps'])):
+        timesteps.append(eval_data['timesteps'][i])
+        rewards.append(eval_data['rewards'][i])
+        successes = eval_data['successes'][i]
+        success_rates.append(np.sum(successes)/len(successes))
+        times.append(eval_data['times'][i])
+        energies.append(eval_data['energies'][i])
+
+    ax_rewards.plot(timesteps,np.mean(rewards,axis=1))
+    ax_success_rate.plot(timesteps,success_rates)
+    ax_times.plot(timesteps,np.mean(times,axis=1))
+    ax_energies.plot(timesteps,np.mean(energies,axis=1))
 
     plt.show()

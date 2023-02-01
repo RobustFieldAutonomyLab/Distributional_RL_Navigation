@@ -38,10 +38,21 @@ class DummyVecEnv(VecEnv):
         ##### modification #####
         self.discount = env.discount
         self.episode_data = None
+        self.T = env.robot.dt * env.robot.N
 
     ##### modification #####
     def update_episode_data(self):
         self.episode_data = deepcopy(self.envs[0].episode_data())
+
+    ##### modification #####
+    def compute_action_energy_cost(self,action):
+        return self.envs[0].robot.compute_action_energy_cost(action)
+
+    def reset_with_eval_config(self,config):
+        for env_idx in range(self.num_envs):
+            obs = self.envs[env_idx].reset_with_eval_config(config)
+            self._save_obs(env_idx, obs)
+        return self._obs_from_buf()
 
     def step_async(self, actions: np.ndarray) -> None:
         self.actions = actions

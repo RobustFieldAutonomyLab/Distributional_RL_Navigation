@@ -73,12 +73,12 @@ class IQNAgent():
         self.learning_timestep = 0
 
         # Evaluation data
-        self.eval_timesteps = []
-        self.eval_actions = []
-        self.eval_rewards = []
-        self.eval_successes = []
-        self.eval_times = []
-        self.eval_energies = []
+        self.eval_timesteps = dict(greedy=[],adaptive=[])
+        self.eval_actions = dict(greedy=[],adaptive=[])
+        self.eval_rewards = dict(greedy=[],adaptive=[])
+        self.eval_successes = dict(greedy=[],adaptive=[])
+        self.eval_times = dict(greedy=[],adaptive=[])
+        self.eval_energies = dict(greedy=[],adaptive=[])
 
     def load_model(self,path,device="cpu"):
         # load trained IQN models
@@ -198,6 +198,16 @@ class IQNAgent():
         
         return action
 
+    def act_adaptive(self,state,eps):
+        """adptively tune the CVaR value, compute action index and quantiles
+        Params
+        ======
+            frame: to adjust epsilon
+            state (array_like): current state
+        """
+        cvar = self.adjust_cvar(state)
+        return self.act(state,eps,cvar)
+
     def act_eval(self, state, eps=0.0, cvar=1.0):
         """Returns action index and quantiles 
         Params
@@ -227,11 +237,14 @@ class IQNAgent():
             frame: to adjust epsilon
             state (array_like): current state
         """
-        
+        cvar = self.adjust_cvar(state)
+        return self.act_eval(state, eps, cvar)
+
+    def adjust_cvar(self,state):
         # scale CVaR value according to the closest distance to obstacles
         sonar_points = state[4:]
-        thres = 5.0
-        closest_d = 10.0
+        
+        closest_d = np.inf
         for i in range(0,len(sonar_points),2):
             x = sonar_points[i]
             y = sonar_points[i+1]
@@ -242,10 +255,10 @@ class IQNAgent():
             closest_d = min(closest_d, np.linalg.norm(sonar_points[i:i+2]))
         
         cvar = 1.0
-        if closest_d < thres:
-            cvar = closest_d / thres 
+        if closest_d < 10.0:
+            cvar = closest_d / 10.0
 
-        return self.act_eval(state, eps, cvar)
+        return cvar
 
     def train(self, experiences):
         """Update value parameters using given batch of experience tuples
@@ -314,7 +327,8 @@ class IQNAgent():
         time_data = []
         energy_data = []
         
-        for config in eval_config.values():
+        for idx, config in enumerate(eval_config.values()):
+            print(f"Evaluating episode {idx}")
             observation = eval_env.reset_with_eval_config(config)
             actions = []
             cumulative_reward = 0.0
@@ -324,9 +338,9 @@ class IQNAgent():
             
             while not done and length < 1000:
                 if greedy:
-                    action,_,_ = self.act_eval(observation)
+                    action = self.act(observation,eps=0.0)
                 else:
-                    action,_,_ = self.act_adaptive_eval(observation)
+                    action = self.act_adaptive(observation,eps=0.0)    
                 observation, reward, done, info = eval_env.step(action)
                 cumulative_reward += eval_env.discount ** length * reward
                 length += 1
@@ -355,12 +369,12 @@ class IQNAgent():
         print(f"Avg energy: {avg_e:.2f}")
         print(f"++++++++ Evaluation info ({policy} IQN) ++++++++\n")
 
-        self.eval_timesteps.append(self.current_timestep)
-        self.eval_actions.append(action_data)
-        self.eval_rewards.append(reward_data)
-        self.eval_successes.append(success_data)
-        self.eval_times.append(time_data)
-        self.eval_energies.append(energy_data)
+        self.eval_timesteps[policy].append(self.current_timestep)
+        self.eval_actions[policy].append(action_data)
+        self.eval_rewards[policy].append(reward_data)
+        self.eval_successes[policy].append(success_data)
+        self.eval_times[policy].append(time_data)
+        self.eval_energies[policy].append(energy_data)
 
         if eval_log_path is not None:
             filename = "greedy_evaluations.npz" if greedy else "adaptive_evaluations.npz"
@@ -368,12 +382,12 @@ class IQNAgent():
             # save evaluation data
             np.savez(
                 os.path.join(eval_log_path,filename),
-                timesteps=self.eval_timesteps,
-                actions=self.eval_actions,
-                rewards=self.eval_rewards,
-                successes=self.eval_successes,
-                times=self.eval_times,
-                energies=self.eval_energies
+                timesteps=self.eval_timesteps[policy],
+                actions=self.eval_actions[policy],
+                rewards=self.eval_rewards[policy],
+                successes=self.eval_successes[policy],
+                times=self.eval_times[policy],
+                energies=self.eval_energies[policy]
             )
 
 

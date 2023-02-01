@@ -264,6 +264,8 @@ class DQN(OffPolicyAlgorithm):
         callback: MaybeCallback = None,
         log_interval: int = 4,
         eval_env: Optional[GymEnv] = None,
+        ##### modification #####
+        eval_config: dict = {None:None},
         eval_freq: int = -1,
         n_eval_episodes: int = 5,
         tb_log_name: str = "DQN",
@@ -277,6 +279,7 @@ class DQN(OffPolicyAlgorithm):
             callback=callback,
             log_interval=log_interval,
             eval_env=eval_env,
+            eval_config=eval_config,
             eval_freq=eval_freq,
             n_eval_episodes=n_eval_episodes,
             tb_log_name=tb_log_name,

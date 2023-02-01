@@ -11,6 +11,8 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv, VecMonitor, is
 def evaluate_policy(
     model: "base_class.BaseAlgorithm",
     env: Union[gym.Env, VecEnv],
+    ##### modification #####
+    configs: dict = {},
     n_eval_episodes: int = 10,
     deterministic: bool = True,
     render: bool = False,
@@ -70,74 +72,121 @@ def evaluate_policy(
         )
 
     n_envs = env.num_envs
-    episode_rewards = []
-    episode_lengths = []
+    assert n_envs == 1, "only support single evaluation environment"
+    # episode_rewards = []
+    # episode_lengths = []
 
-    episode_counts = np.zeros(n_envs, dtype="int")
-    # Divides episodes among different sub environments in the vector as evenly as possible
-    episode_count_targets = np.array([(n_eval_episodes + i) // n_envs for i in range(n_envs)], dtype="int")
-
-    current_rewards = np.zeros(n_envs)
-    current_lengths = np.zeros(n_envs, dtype="int")
-    observations = env.reset()
-    states = None
-    episode_starts = np.ones((env.num_envs,), dtype=bool)
-    while (episode_counts < episode_count_targets).any():
-        actions, states = model.predict(observations, state=states, episode_start=episode_starts, deterministic=deterministic)
-        observations, rewards, dones, infos = env.step(actions)
-        # current_rewards += rewards
-        current_rewards += env.discount ** current_lengths[0] * rewards
-        current_lengths += 1
-        for i in range(n_envs):
-            if episode_counts[i] < episode_count_targets[i]:
-
-                # unpack values so that the callback can access the local variables
-                reward = rewards[i]
-                done = dones[i]
-                info = infos[i]
-                episode_starts[i] = done
-
-                if callback is not None:
-                    callback(locals(), globals())
-                
-                ##### modification #####
-                if dones[i] or current_lengths[i] >= 1000:
-                    if not dones[i]:
-                        env.update_episode_data()
-                    print("Eval_steps: ",current_lengths[i]," Eval_return: ",current_rewards[i])
-                    # if is_monitor_wrapped:
-                    #     # Atari wrapper can send a "done" signal when
-                    #     # the agent loses a life, but it does not correspond
-                    #     # to the true end of episode
-                    #     if "episode" in info.keys():
-                    #         # Do not trust "done" with episode endings.
-                    #         # Monitor wrapper includes "episode" key in info if environment
-                    #         # has been wrapped with it. Use those rewards instead.
-                    #         episode_rewards.append(info["episode"]["r"])
-                    #         episode_lengths.append(info["episode"]["l"])
-                    #         # Only increment at the real end of an episode
-                    #         episode_counts[i] += 1
-                    # else:
-                    #     episode_rewards.append(current_rewards[i])
-                    #     episode_lengths.append(current_lengths[i])
-                    #     episode_counts[i] += 1
-                    
-                    episode_rewards.append(current_rewards[i])
-                    episode_lengths.append(current_lengths[i])
-                    episode_counts[i] += 1
-                    
-                    current_rewards[i] = 0
-                    current_lengths[i] = 0
-
-        if render:
-            env.render()
-
-    mean_reward = np.mean(episode_rewards)
-    std_reward = np.std(episode_rewards)
-    if reward_threshold is not None:
-        assert mean_reward > reward_threshold, "Mean reward below threshold: " f"{mean_reward:.2f} < {reward_threshold:.2f}"
-    if return_episode_rewards:
-        ##### modification #####
-        return episode_rewards, episode_lengths, env.episode_data
     ##### modification #####
-    return mean_reward, std_reward, env.episode_data
+    reward_data = []
+    action_data = []
+    success_data = []
+    time_data = []
+    energy_data = []
+
+    for k, config in enumerate(configs.values()):
+
+        episode_counts = np.zeros(n_envs, dtype="int")
+        # Divides episodes among different sub environments in the vector as evenly as possible
+        episode_count_targets = np.array([(n_eval_episodes + i) // n_envs for i in range(n_envs)], dtype="int")
+        
+        observations = env.reset()
+        if config is not None:
+            observations = env.reset_with_eval_config(config)
+        states = None
+        episode_starts = np.ones((env.num_envs,), dtype=bool)
+
+        ##### modification #####
+        a = []
+        cumulative_reward = 0.0
+        length = 0
+        energy = 0.0
+        done = False
+
+        print(f"Evaluating episode {k}")
+        while (episode_counts < episode_count_targets).any():
+            actions, states = model.predict(observations, state=states, episode_start=episode_starts, deterministic=deterministic)
+            observations, rewards, dones, infos = env.step(actions)
+            # current_rewards += rewards
+            for i in range(n_envs):
+                if episode_counts[i] < episode_count_targets[i]:
+
+                    # unpack values so that the callback can access the local variables
+                    reward = rewards[i]
+                    done = dones[i]
+                    info = infos[i]
+                    episode_starts[i] = done
+
+                    cumulative_reward += env.discount ** length * reward
+                    length += 1
+                    energy += env.compute_action_energy_cost(int(actions[i]))
+                    a.append(int(actions[i]))
+
+                    if callback is not None:
+                        callback(locals(), globals())
+                    
+                    ##### modification #####
+                    if done or length >= 1000:
+                        if not done and config is None:
+                            env.update_episode_data()
+
+                        success = True if info["state"] == "reach goal" else False
+                        time = env.T * length
+
+                        action_data.append(a)
+                        reward_data.append(cumulative_reward)
+                        success_data.append(success)
+                        time_data.append(time)
+                        energy_data.append(energy)
+                        
+                        # print("Eval_steps: ",current_lengths[i]," Eval_return: ",current_rewards[i])
+                        
+                        # if is_monitor_wrapped:
+                        #     # Atari wrapper can send a "done" signal when
+                        #     # the agent loses a life, but it does not correspond
+                        #     # to the true end of episode
+                        #     if "episode" in info.keys():
+                        #         # Do not trust "done" with episode endings.
+                        #         # Monitor wrapper includes "episode" key in info if environment
+                        #         # has been wrapped with it. Use those rewards instead.
+                        #         episode_rewards.append(info["episode"]["r"])
+                        #         episode_lengths.append(info["episode"]["l"])
+                        #         # Only increment at the real end of an episode
+                        #         episode_counts[i] += 1
+                        # else:
+                        #     episode_rewards.append(current_rewards[i])
+                        #     episode_lengths.append(current_lengths[i])
+                        #     episode_counts[i] += 1
+                        
+                        # episode_rewards.append(current_rewards[i])
+                        # episode_lengths.append(current_lengths[i])
+                        episode_counts[i] += 1
+                        
+                        # current_rewards[i] = 0
+                        # current_lengths[i] = 0
+
+            if render:
+                env.render()
+
+    avg_r = np.mean(reward_data)
+    success_rate = np.sum(success_data)/len(success_data)
+    avg_t = np.mean(time_data)
+    avg_e = np.mean(energy_data)
+    
+    print(f"++++++++ Evaluation info ++++++++")
+    print(f"Avg cumulative reward: {avg_r:.2f}")
+    print(f"Success rate: {success_rate:.2f}")
+    print(f"Avg time: {avg_t:.2f}")
+    print(f"Avg energy: {avg_e:.2f}")
+    print(f"++++++++ Evaluation info ++++++++\n")
+
+    # mean_reward = np.mean(episode_rewards)
+    # std_reward = np.std(episode_rewards)
+    # if reward_threshold is not None:
+    #     assert mean_reward > reward_threshold, "Mean reward below threshold: " f"{mean_reward:.2f} < {reward_threshold:.2f}"
+    # if return_episode_rewards:
+    #     ##### modification #####
+    #     return episode_rewards, episode_lengths, env.episode_data
+    # ##### modification #####
+    # return mean_reward, std_reward, env.episode_data
+
+    return reward_data, action_data, success_data, time_data, energy_data, env.episode_data

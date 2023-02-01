@@ -350,6 +350,8 @@ class EvalCallback(EventCallback):
     def __init__(
         self,
         eval_env: Union[gym.Env, VecEnv],
+        ##### modification #####
+        eval_config: dict = {None:None},
         callback_on_new_best: Optional[BaseCallback] = None,
         callback_after_eval: Optional[BaseCallback] = None,
         n_eval_episodes: int = 5,
@@ -381,6 +383,8 @@ class EvalCallback(EventCallback):
             eval_env = DummyVecEnv([lambda: eval_env])
 
         self.eval_env = eval_env
+        ##### modification #####
+        self.eval_config = eval_config
         self.best_model_save_path = best_model_save_path
         # Logs will be written in ``evaluations.npz``
         if log_path is not None:
@@ -391,6 +395,11 @@ class EvalCallback(EventCallback):
         self.evaluations_length = []
 
         ##### modification #####
+        self.reward_data = []
+        self.action_data = []
+        self.success_data = []
+        self.time_data = []
+        self.energy_data = []
         self.evaluations_data = []
 
         # For computing success rate
@@ -449,9 +458,11 @@ class EvalCallback(EventCallback):
             self._is_success_buffer = []
 
             ##### modification #####
-            episode_rewards, episode_lengths, episode_data = evaluate_policy(
+            reward_data, action_data, success_data, time_data, energy_data, episode_data = evaluate_policy(
                 self.model,
                 self.eval_env,
+                ##### modification #####
+                self.eval_config,
                 n_eval_episodes=self.n_eval_episodes,
                 render=self.render,
                 deterministic=self.deterministic,
@@ -462,9 +473,14 @@ class EvalCallback(EventCallback):
 
             if self.log_path is not None:
                 self.evaluations_timesteps.append(self.num_timesteps)
-                self.evaluations_results.append(episode_rewards)
-                self.evaluations_length.append(episode_lengths)
                 ##### modification #####
+                # self.evaluations_results.append(episode_rewards)
+                # self.evaluations_length.append(episode_lengths)
+                self.reward_data.append(reward_data)
+                self.action_data.append(action_data)
+                self.success_data.append(success_data)
+                self.time_data.append(time_data)
+                self.energy_data.append(energy_data)
                 self.evaluations_data.append(episode_data)
 
                 kwargs = {}
@@ -472,27 +488,44 @@ class EvalCallback(EventCallback):
                 if len(self._is_success_buffer) > 0:
                     self.evaluations_successes.append(self._is_success_buffer)
                     kwargs = dict(successes=self.evaluations_successes)
+                
+                keys = list(self.eval_config.keys())
+                ##### modification #####
+                if keys[0] is None:
+                    np.savez(
+                        self.log_path,
+                        timesteps=self.evaluations_timesteps,
+                        rewards=self.reward_data,
+                        actions=self.action_data,
+                        successes = self.success_data,
+                        times = self.time_data,
+                        energies = self.energy_data,
+                        episode_data=self.evaluations_data,
+                        **kwargs,
+                    )
+                else:
+                    np.savez(
+                        self.log_path,
+                        timesteps=self.evaluations_timesteps,
+                        rewards=self.reward_data,
+                        actions=self.action_data,
+                        successes = self.success_data,
+                        times = self.time_data,
+                        energies = self.energy_data,
+                        **kwargs,
+                    )
 
-                np.savez(
-                    self.log_path,
-                    timesteps=self.evaluations_timesteps,
-                    results=self.evaluations_results,
-                    ep_lengths=self.evaluations_length,
-                    ##### modification #####
-                    episode_data=self.evaluations_data,
-                    **kwargs,
-                )
-
-            mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
-            mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
+            ##### modification #####
+            mean_reward, std_reward = np.mean(reward_data), np.std(reward_data)
+            # mean_ep_length, std_ep_length = np.mean(reward_data), np.std(reward_data)
             self.last_mean_reward = mean_reward
 
             if self.verbose >= 1:
                 print(f"Eval num_timesteps={self.num_timesteps}, " f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}")
-                print(f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}")
+                # print(f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}")
             # Add to current Logger
             self.logger.record("eval/mean_reward", float(mean_reward))
-            self.logger.record("eval/mean_ep_length", mean_ep_length)
+            # self.logger.record("eval/mean_ep_length", mean_ep_length)
 
             if len(self._is_success_buffer) > 0:
                 success_rate = np.mean(self._is_success_buffer)

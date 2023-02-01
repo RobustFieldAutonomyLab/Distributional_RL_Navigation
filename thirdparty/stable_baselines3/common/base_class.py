@@ -380,6 +380,8 @@ class BaseAlgorithm(ABC):
         self,
         callback: MaybeCallback,
         eval_env: Optional[VecEnv] = None,
+        ##### modification #####
+        eval_config: dict = {None:None},
         eval_freq: int = 10000,
         n_eval_episodes: int = 5,
         log_path: Optional[str] = None,
@@ -412,6 +414,7 @@ class BaseAlgorithm(ABC):
         if eval_env is not None:
             eval_callback = EvalCallback(
                 eval_env,
+                eval_config=eval_config,
                 best_model_save_path=log_path,
                 log_path=log_path,
                 eval_freq=eval_freq,
@@ -427,6 +430,8 @@ class BaseAlgorithm(ABC):
         self,
         total_timesteps: int,
         eval_env: Optional[GymEnv],
+        ##### modification #####
+        eval_config: dict = {None:None},
         callback: MaybeCallback = None,
         eval_freq: int = 10000,
         n_eval_episodes: int = 5,
@@ -502,7 +507,7 @@ class BaseAlgorithm(ABC):
             self._logger = utils.configure_logger(self.verbose, self.tensorboard_log, tb_log_name, reset_num_timesteps)
 
         # Create eval callback if needed
-        callback = self._init_callback(callback, eval_env, eval_freq, n_eval_episodes, log_path, progress_bar)
+        callback = self._init_callback(callback, eval_env, eval_config, eval_freq, n_eval_episodes, log_path, progress_bar)
 
         return total_timesteps, callback
 

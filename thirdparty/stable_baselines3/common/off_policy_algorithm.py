@@ -272,6 +272,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         self,
         total_timesteps: int,
         eval_env: Optional[GymEnv],
+        ##### modification #####
+        eval_config: dict = {None:None},
         callback: MaybeCallback = None,
         eval_freq: int = 10000,
         n_eval_episodes: int = 5,
@@ -315,6 +317,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         return super()._setup_learn(
             total_timesteps,
             eval_env,
+            ##### modification #####
+            eval_config,
             callback,
             eval_freq,
             n_eval_episodes,
@@ -330,6 +334,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         callback: MaybeCallback = None,
         log_interval: int = 4,
         eval_env: Optional[GymEnv] = None,
+        ##### modification #####
+        eval_config: dict = {None:None},
         eval_freq: int = -1,
         n_eval_episodes: int = 5,
         tb_log_name: str = "run",
@@ -341,6 +347,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         total_timesteps, callback = self._setup_learn(
             total_timesteps,
             eval_env,
+            eval_config,
             callback,
             eval_freq,
             n_eval_episodes,
