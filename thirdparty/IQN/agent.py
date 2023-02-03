@@ -3,6 +3,7 @@ import torch.optim as optim
 import numpy as np
 import random
 from thirdparty.IQN.model import IQN
+from thirdparty.IQN.model import ObsEncoder
 from thirdparty.IQN.replay_buffer import ReplayBuffer
 import os
 
@@ -57,8 +58,10 @@ class IQNAgent():
         self.final_eps = final_eps
 
         # IQN-Network
-        self.qnetwork_local = IQN(self.state_size, self.action_size, layer_size, seed, device).to(device)
-        self.qnetwork_target = IQN(self.state_size, self.action_size, layer_size, seed, device).to(device)
+        # self.qnetwork_local = IQN(self.state_size, self.action_size, layer_size, seed, device).to(device)
+        # self.qnetwork_target = IQN(self.state_size, self.action_size, layer_size, seed, device).to(device)
+        self.qnetwork_local = ObsEncoder(self.state_size, self.action_size, seed, device).to(device)
+        self.qnetwork_target = ObsEncoder(self.state_size, self.action_size, seed, device).to(device)
 
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=self.LR)
         #print(self.qnetwork_local)

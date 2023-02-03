@@ -94,7 +94,7 @@ def run_trial(device,params):
     print("Creating 30 evaluation environments\n")
     eval_config = create_eval_configs(evaluate_env) 
 
-    model = DQN(policy='MlpPolicy',
+    model = DQN(policy='ObsEncoderPolicy',
                env=train_env,
                learning_starts=10000,
                train_freq=1,

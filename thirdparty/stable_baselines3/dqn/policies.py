@@ -10,6 +10,7 @@ from stable_baselines3.common.torch_layers import (
     CombinedExtractor,
     FlattenExtractor,
     NatureCNN,
+    ObsEncoder,
     create_mlp,
 )
 from stable_baselines3.common.type_aliases import Schedule
@@ -207,6 +208,34 @@ class DQNPolicy(BasePolicy):
 
 MlpPolicy = DQNPolicy
 
+##### modification #####
+class ObsEncoderPolicy(DQNPolicy):
+
+    def __init__(
+        self,
+        observation_space: gym.spaces.Space,
+        action_space: gym.spaces.Space,
+        lr_schedule: Schedule,
+        net_arch: Optional[List[int]] = None,
+        activation_fn: Type[nn.Module] = nn.ReLU,
+        features_extractor_class: Type[BaseFeaturesExtractor] = ObsEncoder,
+        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
+        normalize_images: bool = True,
+        optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
+        optimizer_kwargs: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            observation_space,
+            action_space,
+            lr_schedule,
+            net_arch,
+            activation_fn,
+            features_extractor_class,
+            features_extractor_kwargs,
+            normalize_images,
+            optimizer_class,
+            optimizer_kwargs,
+        )
 
 class CnnPolicy(DQNPolicy):
     """

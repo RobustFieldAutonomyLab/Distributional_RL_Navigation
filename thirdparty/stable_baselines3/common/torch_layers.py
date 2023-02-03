@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple, Type, Union
 import gym
 import torch as th
 from torch import nn
+import numpy as np
 
 from stable_baselines3.common.preprocessing import get_flattened_obs_dim, is_image_space
 from stable_baselines3.common.type_aliases import TensorDict
@@ -92,6 +93,46 @@ class NatureCNN(BaseFeaturesExtractor):
     def forward(self, observations: th.Tensor) -> th.Tensor:
         return self.linear(self.cnn(observations))
 
+##### modification #####
+class ObsEncoder(BaseFeaturesExtractor):
+    """
+    model with individual encoders for different parts of the observation
+    """
+    def __init__(self, observation_space: gym.spaces.Box, state_size=26, action_size=9):
+        super().__init__(observation_space, features_dim=action_size)
+        self.state_size = state_size
+        self.action_size = action_size
+        
+        # observation encoders
+        assert state_size == 26, "observation dimension needs to be 26 (velocity, goal, measurements)"
+        self.velocity_encoder = nn.Linear(2,16)
+        self.goal_encoder = nn.Linear(2,16)
+        self.sensor_encoder = nn.Linear(22,176)
+
+        # hidden layers
+        self.hidden_layer = nn.Linear(208, 64)
+        self.hidden_layer_2 = nn.Linear(64, 64)
+        self.output_layer = nn.Linear(64, action_size)
+
+    def forward(self, inputs):
+
+        assert inputs.shape[1] == self.state_size, "input size not equal state size"
+
+        velocitys = inputs[:,:2]
+        goals = inputs[:,2:4]
+        sensors = inputs[:,4:]
+
+        # encode observation as features
+        v_features = self.velocity_encoder(velocitys)
+        g_features = self.goal_encoder(goals)
+        s_featrues = self.sensor_encoder(sensors)
+        features = th.cat((v_features,g_features,s_featrues),1)
+        
+        features = th.relu(self.hidden_layer(features))
+        features = th.relu(self.hidden_layer_2(features))
+        out = self.output_layer(features)
+        return out
+    
 
 def create_mlp(
     input_dim: int,
