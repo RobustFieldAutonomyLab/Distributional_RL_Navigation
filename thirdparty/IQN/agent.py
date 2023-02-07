@@ -85,8 +85,10 @@ class IQNAgent():
 
     def load_model(self,path,device="cpu"):
         # load trained IQN models
-        self.qnetwork_local = IQN.load(path,device)
-        self.qnetwork_target = IQN.load(path,device)
+        # self.qnetwork_local = IQN.load(path,device)
+        # self.qnetwork_target = IQN.load(path,device)
+        self.qnetwork_local = ObsEncoder.load(path,device)
+        self.qnetwork_target = ObsEncoder.load(path,device)
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=self.LR)
 
     def learn(self,
@@ -209,7 +211,7 @@ class IQNAgent():
             state (array_like): current state
         """
         cvar = self.adjust_cvar(state)
-        return self.act(state,eps,cvar)
+        return self.act(state,eps,cvar), cvar
 
     def act_eval(self, state, eps=0.0, cvar=1.0):
         """Returns action index and quantiles 
@@ -241,7 +243,7 @@ class IQNAgent():
             state (array_like): current state
         """
         cvar = self.adjust_cvar(state)
-        return self.act_eval(state, eps, cvar)
+        return self.act_eval(state, eps, cvar), cvar
 
     def adjust_cvar(self,state):
         # scale CVaR value according to the closest distance to obstacles
@@ -252,7 +254,7 @@ class IQNAgent():
             x = sonar_points[i]
             y = sonar_points[i+1]
 
-            if x == 0 and y == 0:
+            if np.abs(x) < 1e-3 and np.abs(y) < 1e-3:
                 continue
 
             closest_d = min(closest_d, np.linalg.norm(sonar_points[i:i+2]))

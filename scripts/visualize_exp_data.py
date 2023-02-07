@@ -5,17 +5,13 @@ import json
 import numpy as np
 
 if __name__ == "__main__":
-    # filename = "../experiment_data/exp_data_1.json"
-    # filename = "../experiment_data/exp_data_2023-01-25-16-18-30.json"
-    # filename = "../experiment_data/exp_data_2023-01-25-17-28-28.json"
-    # filename = "../experiment_data/exp_data_2023-01-25-19-06-28.json"
-    # filename = "../experiment_data/exp_data_2023-01-26-21-32-02.json"
-    filename = "../experiment_data/exp_data_2023-01-29-00-42-54.json"
+    # filename = "../experiment_data/exp_data_2023-02-06-22-03-31.json"
+    filename = "../experiment_data/exp_data_2023-02-06-22-33-16.json"
 
     with open(filename,"r") as f:
         exp_data = json.load(f)
 
-    names = ["adaptive_IQN","IQN","DQN","APF","BA"]
+    names = ["adaptive_IQN","IQN_0.25","IQN_0.5","IQN_0.75","IQN_1.0","DQN","APF","BA"]
 
     for name in names:
         res = np.array(exp_data[name]["success"])
@@ -33,38 +29,56 @@ if __name__ == "__main__":
 
     ep_list = []
     for i in range(len(exp_data["adaptive_IQN"]["success"])):
-        add = True
-        for name in names:
-            if not exp_data[name]["success"][i]:
-                add = False
-                break
-        if add:
+        # add = True
+        # for name in names:
+        #     if not exp_data[name]["success"][i]:
+        #         add = False
+        #         break
+        # if add:
+        #     ep_list.append(i)
+
+        if exp_data["adaptive_IQN"]["success"][i] and not exp_data["IQN_1.0"]["success"][i]:
             ep_list.append(i)
-        
     
     print(len(ep_list))
     print(ep_list)
 
-    # ep_id = 259
-    # ep_id = 374
-    ep_id = 0
+    # ep_id = 110
+    ep_id = 208
 
-    plot_agents = ["adaptive_IQN","APF","BA"]
+    plot_agents = ["adaptive_IQN","IQN_1.0"]
     action_sequences = {}
 
     print(f"Episode {ep_id} results:")
+    min_len = np.inf
     for name in plot_agents:
         res = exp_data[name]["success"][ep_id]
         t = np.array(exp_data[name]["time"][ep_id])
         e = np.array(exp_data[name]["energy"][ep_id])
         action_sequences[name] = exp_data[name]["ep_data"][ep_id]["robot"]["action_history"]
+        min_len = min(min_len,len(action_sequences[name]))
         print(f"{name}| success: {res} | time: {t} | energy: {e}")
 
-    ev = env_visualizer.EnvVisualizer(draw_traj=True)
+    # identify the fork state where adaptive IQN and IQN choose different actions for the first time
+    fork_state = None
+    for i in range(min_len):
+        if action_sequences["adaptive_IQN"][i] != action_sequences["IQN_1.0"][i]:
+            fork_state = {}
+            fork_state["id"] = i
+            fork_state["actions_cvars"] = [exp_data["adaptive_IQN"]["ep_data"][ep_id]["robot"]["actions_cvars"][i],
+                                           exp_data["IQN_1.0"]["ep_data"][ep_id]["robot"]["actions_cvars"][i]]
+            fork_state["actions_quantiles"] = [exp_data["adaptive_IQN"]["ep_data"][ep_id]["robot"]["actions_quantiles"][i][0],
+                                               exp_data["IQN_1.0"]["ep_data"][ep_id]["robot"]["actions_quantiles"][i][0]]
+            break
+
+    ev = env_visualizer.EnvVisualizer(draw_dist=True,cvar_num=2)
 
     episode = exp_data["adaptive_IQN"]["ep_data"][ep_id]
     ev.load_episode(episode)
     
     # Draw trajectorys
-    ev.draw_trajectory(only_ep_actions=False,all_actions=action_sequences)
+    ev.draw_trajectory(only_ep_actions=False,all_actions=action_sequences,fork_state_info=fork_state)
+
+    ev.fig.tight_layout()
+    ev.fig.savefig("cvar_distributions.png")
     

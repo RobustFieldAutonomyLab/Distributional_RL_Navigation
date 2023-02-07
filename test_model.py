@@ -15,6 +15,7 @@ import copy
 import scipy.spatial
 import env_visualizer
 import json
+import time
 
 def evaluation(first_observation, agent):
     print("===== Evaluation =====")
@@ -51,6 +52,7 @@ def evaluation_IQN(first_observation, agent):
     cvars = [1.0,0.7,0.4,0.1]
     # cvars = [0.7]
 
+    start = time.time()
     while not done and length < 1000:
         action = None
         select = 0
@@ -69,8 +71,11 @@ def evaluation_IQN(first_observation, agent):
         observation, reward, done, info = test_env.step(int(action))
         cumulative_reward += test_env.discount ** length * reward
         length += 1
-        # if length % 50 == 0:
-        #     print(length)
+        if length % 50 == 0:
+            print(length)
+
+    end = time.time()
+    print("time: ",end-start)
 
     res = "success!" if info["state"] == "reach goal" else "failed!" 
     print(res)
@@ -417,26 +422,95 @@ def reset_scenario_strong_adverse_current():
 
     return test_env.get_observation()
 
+def reset_hard_test_env():
+    test_env.cores.clear()
+    test_env.obstacles.clear()
+    
+    # set start and goal
+    test_env.start = np.array([5.0,5.0])
+    test_env.goal = np.array([45.0,45.0])
+
+    num_cores = 8
+    num_obs = 10
+
+    # generate vortex with random position, spinning direction and strength
+    if num_cores > 0:
+        iteration = 500
+        while True:
+            center = test_env.rd.uniform(low = np.zeros(2), high = np.array([test_env.width,test_env.height]))
+            direction = test_env.rd.binomial(1,0.5)
+            v_edge = test_env.rd.uniform(low = test_env.v_range[0], high = test_env.v_range[1])
+            Gamma = 2 * np.pi * test_env.r * v_edge
+            core = marinenav_env.Core(center[0],center[1],direction,Gamma)
+            iteration -= 1
+            if test_env.check_core(core):
+                test_env.cores.append(core)
+                num_cores -= 1
+            if iteration == 0 or num_cores == 0:
+                break
+    
+    centers = None
+    for core in test_env.cores:
+        if centers is None:
+            centers = np.array([[core.x,core.y]])
+        else:
+            c = np.array([[core.x,core.y]])
+            centers = np.vstack((centers,c))
+    
+    # KDTree storing vortex core center positions
+    if centers is not None:
+        test_env.core_centers = scipy.spatial.KDTree(centers)
+
+    # generate obstacles with random position
+    if num_obs > 0:
+        iteration = 500
+        while True:
+            center = test_env.rd.uniform(low = 10*np.ones(2), high = 40*np.ones(2))
+            r = 1.0
+            obs = marinenav_env.Obstacle(center[0],center[1],r)
+            iteration -= 1
+            if test_env.check_obstacle(obs):
+                test_env.obstacles.append(obs)
+                num_obs -= 1
+            if iteration == 0 or num_obs == 0:
+                break
+
+    centers = None
+    for obs in test_env.obstacles:
+        if centers is None:
+            centers = np.array([[obs.x,obs.y]])
+        else:
+            c = np.array([[obs.x,obs.y]])
+            centers = np.vstack((centers,c))
+    
+    # KDTree storing obstacle center positions
+    if centers is not None: 
+        test_env.obs_centers = scipy.spatial.KDTree(centers)
+
+    # reset robot state
+    test_env.reset_robot()
+
+    return test_env.get_observation()
+
 if __name__ == "__main__":
 
-    save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2" # IQN
-    # save_dir = "training_data/experiment_2023-01-19-22-58-37/seed_2" # IQN with angle penalty
-    # save_dir = "training_data/experiment_2022-12-23-18-19-03/seed_2" # DQN
-    # save_dir = "training_data/experiment_2023-01-20-19-56-05/seed_4" # DQN with angle penalty
+    # save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2" # IQN
+    # save_dir = "training_data/training_2023-02-02-15-09-50/seed_2" # IQN
+    save_dir = "training_data/training_2023-02-02-17-20-39/seed_2" # DQN
     # save_dir = "training_data/experiment_2023-01-19-22-58-47/seed_2" # QR-DQN with angle penalty
     model_file = "latest_model.zip"
     eval_file = "evaluations.npz"
 
-    ev = env_visualizer.EnvVisualizer(seed=20)
+    ev = env_visualizer.EnvVisualizer(seed=40)
 
     test_env = ev.env
 
-    first_obs = reset_scenario_strong_adverse_current()
+    first_obs = reset_hard_test_env()
 
     ##### DQN #####
-    # DQN_agent = DQN.load(os.path.join(save_dir,model_file),print_system_info=True)
+    DQN_agent = DQN.load(os.path.join(save_dir,model_file),print_system_info=True)
 
-    # ep_data = evaluation(first_obs,DQN_agent)
+    ep_data = evaluation(first_obs,DQN_agent)
     ##### DQN #####
 
     ##### IQN #####
@@ -458,9 +532,9 @@ if __name__ == "__main__":
     ##### QR-DQN #####
 
     ##### APF #####
-    APF_agent = APF.APF_agent(test_env.robot.a,test_env.robot.w)
+    # APF_agent = APF.APF_agent(test_env.robot.a,test_env.robot.w)
     
-    ep_data = evaluation_classical(first_obs,APF_agent)
+    # ep_data = evaluation_classical(first_obs,APF_agent)
     ##### APF #####
 
     ##### BA #####
@@ -475,11 +549,13 @@ if __name__ == "__main__":
 
     # test_env.save_episode("test.json")
 
-    ev_2 = env_visualizer.EnvVisualizer(draw_traj=True)
     # ev_2 = env_visualizer.EnvVisualizer(draw_dist=True, cvar_num=4) # for IQN only
+    ev_2 = env_visualizer.EnvVisualizer()
     
     ev_2.load_episode_from_json_file("test.json")
 
+    ev_2.play_episode()
+
     # Draw trajectorys
-    ev_2.draw_trajectory()
+    # ev_2.draw_trajectory()
 

@@ -17,7 +17,7 @@ import env_visualizer
 import json
 from datetime import datetime
 
-def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False):
+def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False, cvar=1.0):
     observation = first_observation
     cumulative_reward = 0.0
     length = 0
@@ -27,26 +27,26 @@ def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False):
     quantiles_data = []
     taus_data = []
 
-    cvars = [1.0]
+    cvars = []
 
     while not done and length < 1000:
         action = None
-        select = 0
-        for i,cvar in enumerate(cvars):
-            if adaptive:
-                a, quantiles, taus = agent.act_adaptive_eval(observation)
-            else:
-                a, quantiles, taus = agent.act_eval(observation,cvar=cvar)
+        if adaptive:
+            (action, quantiles, taus), cvar = agent.act_adaptive_eval(observation)
+            cvars.append(cvar)
+        else:
+            action, quantiles, taus = agent.act_eval(observation,cvar=cvar)
+            cvars.append(cvar)
 
-            if i == select:
-                action = a
+        quantiles_data.append(quantiles)
+        taus_data.append(taus)
 
-            if len(quantiles_data) < len(cvars):
-                quantiles_data.append(quantiles)
-                taus_data.append(taus)
-            else:
-                quantiles_data[i] = np.concatenate((quantiles_data[i],quantiles))
-                taus_data[i] = np.concatenate((taus_data[i],taus))
+        # if len(quantiles_data) < len(cvars):
+        #     quantiles_data.append(quantiles)
+        #     taus_data.append(taus)
+        # else:
+        #     quantiles_data[i] = np.concatenate((quantiles_data[i],quantiles))
+        #     taus_data[i] = np.concatenate((taus_data[i],taus))
         
         observation, reward, done, info = test_env.step(int(action))
         cumulative_reward += test_env.discount ** length * reward
@@ -114,13 +114,85 @@ def exp_setup_2(envs):
         env.obs_r_range = [1,1]
         env.num_obs = 10
 
-def exp_setup_3(envs):
-    # 1. fix the obstacle r = 0.5, and increases num to 10
+def exp_setup_3(envs,n_obs,n_cores):
+    # 1. fix the obstacle r = 0.5, and increases num to 8
     # 2. reduce the area of obstacle generation to make them more dense
     # 3. fix the start and goal position so that obstacles lie in the line between them
+    observations = []
     for env in envs:
         env.obs_r_range = [1,1]
-        env.num_obs = 10
+        env.num_obs = n_obs
+        env.num_cores = n_cores
+        env.start = np.array([6.0,6.0])
+        env.goal = np.array([44.0,44.0])
+
+        # reset the environment
+        env.cores.clear()
+        env.obstacles.clear()
+
+        num_cores = env.num_cores
+        num_obs = env.num_obs
+
+        # generate vortex with random position, spinning direction and strength
+        if num_cores > 0:
+            iteration = 500
+            while True:
+                center = env.rd.uniform(low = np.zeros(2), high = np.array([env.width,env.height]))
+                direction = env.rd.binomial(1,0.5)
+                v_edge = env.rd.uniform(low = env.v_range[0], high = env.v_range[1])
+                Gamma = 2 * np.pi * env.r * v_edge
+                core = marinenav_env.Core(center[0],center[1],direction,Gamma)
+                iteration -= 1
+                if env.check_core(core):
+                    env.cores.append(core)
+                    num_cores -= 1
+                if iteration == 0 or num_cores == 0:
+                    break
+        
+        centers = None
+        for core in env.cores:
+            if centers is None:
+                centers = np.array([[core.x,core.y]])
+            else:
+                c = np.array([[core.x,core.y]])
+                centers = np.vstack((centers,c))
+        
+        # KDTree storing vortex core center positions
+        if centers is not None:
+            env.core_centers = scipy.spatial.KDTree(centers)
+
+        # generate obstacles with random position and size
+        if num_obs > 0:
+            iteration = 500
+            while True:
+                center = env.rd.uniform(low = 10*np.ones(2), high = 40*np.ones(2))
+                r = env.rd.uniform(low = env.obs_r_range[0], high = env.obs_r_range[1])
+                obs = marinenav_env.Obstacle(center[0],center[1],r)
+                iteration -= 1
+                if env.check_obstacle(obs):
+                    env.obstacles.append(obs)
+                    num_obs -= 1
+                if iteration == 0 or num_obs == 0:
+                    break
+
+        centers = None
+        for obs in env.obstacles:
+            if centers is None:
+                centers = np.array([[obs.x,obs.y]])
+            else:
+                c = np.array([[obs.x,obs.y]])
+                centers = np.vstack((centers,c))
+        
+        # KDTree storing obstacle center positions
+        if centers is not None: 
+            env.obs_centers = scipy.spatial.KDTree(centers)
+
+        # reset robot state
+        env.reset_robot()
+
+        observations.append(env.get_observation())
+
+    return observations
 
 def exp_setup_4(envs):
     # Demonstrate that RL agents are clearly better in adverse flow field
@@ -188,18 +260,16 @@ def exp_setup_4(envs):
 
     return observations
 
-def run_experiment():
-    num = 1
-    agents = [IQN_agent_0,IQN_agent_1,DQN_agent_1,APF_agent,BA_agent]
-    names = ["adaptive_IQN","IQN","DQN","APF","BA"]
-    envs = [test_env_0,test_env_1,test_env_3,test_env_5,test_env_6]
-    evaluations = [evaluation_IQN,evaluation_IQN,evaluation_DQN, \
+def run_experiment(n_obs,n_cores):
+    num = 500
+    agents = [IQN_agent_0,IQN_agent_1,IQN_agent_2,IQN_agent_3,IQN_agent_4,DQN_agent_1,APF_agent,BA_agent]
+    names = ["adaptive_IQN","IQN_0.25","IQN_0.5","IQN_0.75","IQN_1.0","DQN","APF","BA"]
+    envs = [test_env_0,test_env_1,test_env_2,test_env_3,test_env_4,test_env_5,test_env_6,test_env_7]
+    evaluations = [evaluation_IQN,evaluation_IQN,evaluation_IQN,evaluation_IQN,evaluation_IQN,evaluation_DQN, \
                    evaluation_classical,evaluation_classical]
 
     dt = datetime.now()
     timestamp = dt.strftime("%Y-%m-%d-%H-%M-%S")
-
-    observations = exp_setup_4(envs)
 
     exp_data = {}
     for name in names:
@@ -207,6 +277,7 @@ def run_experiment():
 
     print(f"Running {num} experiments\n")
     for i in range(num):
+        observations = exp_setup_3(envs,n_obs,n_cores)
         for j in range(len(agents)):
             agent = agents[j]
             env = envs[j]
@@ -218,6 +289,12 @@ def run_experiment():
             
             if name == "adaptive_IQN":
                 ep_data, success, time, energy = evaluation(obs,agent,env,adaptive=True)
+            elif name == "IQN_0.25":
+                ep_data, success, time, energy = evaluation(obs,agent,env,cvar=0.25)
+            elif name == "IQN_0.5":
+                ep_data, success, time, energy = evaluation(obs,agent,env,cvar=0.5)
+            elif name == "IQN_0.75":
+                ep_data, success, time, energy = evaluation(obs,agent,env,cvar=0.75)
             else:
                 ep_data, success, time, energy = evaluation(obs,agent,env)
             
@@ -254,7 +331,8 @@ if __name__ == "__main__":
     ##### adaptive IQN #####
     test_env_0 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
+    # save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
+    save_dir = "training_data/training_2023-02-02-23-24-30/seed_2"
 
     device = "cuda:0"
 
@@ -264,12 +342,13 @@ if __name__ == "__main__":
                          seed=2)
     IQN_agent_0.load_model(save_dir,device)
     ##### adaptive IQN #####
-    
 
-    ##### IQN cvar = 1.0 #####
+
+    ##### IQN cvar = 0.25 #####
     test_env_1 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
+    # save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
+    save_dir = "training_data/training_2023-02-02-23-24-30/seed_2"
 
     device = "cuda:0"
 
@@ -278,13 +357,62 @@ if __name__ == "__main__":
                          device=device,
                          seed=2)
     IQN_agent_1.load_model(save_dir,device)
-    ##### IQN cvar = 1.0 #####
+    ##### IQN cvar = 0.25 #####
+
+
+    ##### IQN cvar = 0.5 #####
+    test_env_2 = marinenav_env.MarineNavEnv(seed)
+
+    # save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
+    save_dir = "training_data/training_2023-02-02-23-24-30/seed_2"
+
+    device = "cuda:0"
+
+    IQN_agent_2 = IQNAgent(test_env_2.get_state_space_dimension(),
+                         test_env_2.get_action_space_dimension(),
+                         device=device,
+                         seed=2)
+    IQN_agent_2.load_model(save_dir,device)
+    ##### IQN cvar = 0.5 #####
+
+
+    ##### IQN cvar = 0.75 #####
+    test_env_3 = marinenav_env.MarineNavEnv(seed)
+
+    # save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
+    save_dir = "training_data/training_2023-02-02-23-24-30/seed_2"
+
+    device = "cuda:0"
+
+    IQN_agent_3 = IQNAgent(test_env_3.get_state_space_dimension(),
+                         test_env_3.get_action_space_dimension(),
+                         device=device,
+                         seed=2)
+    IQN_agent_3.load_model(save_dir,device)
+    ##### IQN cvar = 0.75 #####
+    
+
+    ##### IQN cvar = 1.0 (greedy) #####
+    test_env_4 = marinenav_env.MarineNavEnv(seed)
+
+    # save_dir = "training_data/experiment_2022-12-23-18-02-05/seed_2"
+    save_dir = "training_data/training_2023-02-02-23-24-30/seed_2"
+
+    device = "cuda:0"
+
+    IQN_agent_4 = IQNAgent(test_env_4.get_state_space_dimension(),
+                         test_env_4.get_action_space_dimension(),
+                         device=device,
+                         seed=2)
+    IQN_agent_4.load_model(save_dir,device)
+    ##### IQN cvar = 1.0 (greedy) #####
 
 
     ##### DQN #####
-    test_env_3 = marinenav_env.MarineNavEnv(seed)
+    test_env_5 = marinenav_env.MarineNavEnv(seed)
     
-    save_dir = "training_data/experiment_2022-12-23-18-19-03/seed_2"
+    # save_dir = "training_data/experiment_2022-12-23-18-19-03/seed_2"
+    save_dir = "training_data/training_2023-02-02-23-27-17/seed_2"
     model_file = "latest_model.zip"
 
     DQN_agent_1 = DQN.load(os.path.join(save_dir,model_file),print_system_info=False)
@@ -292,17 +420,18 @@ if __name__ == "__main__":
 
 
     ##### APF #####
-    test_env_5 = marinenav_env.MarineNavEnv(seed)
+    test_env_6 = marinenav_env.MarineNavEnv(seed)
     
-    APF_agent = APF.APF_agent(test_env_5.robot.a,test_env_5.robot.w)
+    APF_agent = APF.APF_agent(test_env_6.robot.a,test_env_6.robot.w)
     ##### APF #####
 
 
     ##### BA #####
-    test_env_6 = marinenav_env.MarineNavEnv(seed)
+    test_env_7 = marinenav_env.MarineNavEnv(seed)
     
-    BA_agent = BA.BA_agent(test_env_6.robot.a,test_env_6.robot.w)
+    BA_agent = BA.BA_agent(test_env_7.robot.a,test_env_7.robot.w)
     ##### BA #####
 
-    run_experiment()
+    for n_obs,n_cores in [[10,8],[6,4]]: 
+        run_experiment(n_obs,n_cores)
 
