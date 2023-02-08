@@ -6,38 +6,45 @@ import os
 
 if __name__ == "__main__":
     first = True
-    seed = 2
-    seed_dir = "seed_"+str(seed)
-    eval_agents = ["IQN","DQN"]
+    seeds = [2,3,4,5,6]
+    eval_agents = ["IQN"]
     colors = ["b","tab:orange"]
 
     fig, (ax_rewards,ax_success_rate) = plt.subplots(2,1,figsize=(8,8))
     
     for idx, eval_agent in enumerate(eval_agents):
-        if eval_agent == "IQN":
-            data_dir = "../training_data/training_2023-02-02-23-24-30" # IQN
-            eval_data = np.load(os.path.join(data_dir,seed_dir,f"greedy_evaluations.npz")) # IQN
-        else:
-            data_dir = "../training_data/training_2023-02-02-23-27-17" # DQN
-            eval_data = np.load(os.path.join(data_dir,seed_dir,"evaluations.npz")) # DQN
+        all_rewards = []
+        all_success_rates = []
+        for seed in seeds:
+            seed_dir = "seed_"+str(seed)
+            # print("checking seed",seed)
+            if eval_agent == "IQN":
+                data_dir = "../training_data/training_2023-02-08-00-06-53" # IQN
+                eval_data = np.load(os.path.join(data_dir,seed_dir,f"greedy_evaluations.npz")) # IQN
+            else:
+                data_dir = "../training_data/training_2023-02-08-00-13-06" # DQN
+                eval_data = np.load(os.path.join(data_dir,seed_dir,"evaluations.npz")) # DQN
 
-        timesteps = []
-        rewards = []
-        success_rates = []
-        times = []
-        energies = []
-        for i in range(len(eval_data['timesteps'])):
-            timesteps.append(eval_data['timesteps'][i])
-            rewards.append(eval_data['rewards'][i])
-            successes = eval_data['successes'][i]
-            success_rates.append(np.sum(successes)/len(successes))
-            times.append(eval_data['times'][i])
-            energies.append(eval_data['energies'][i])
-        
+            timesteps = eval_data['timesteps']
+            rewards = np.mean(eval_data['rewards'],axis=1)
+            success_rates = []
+            for i in range(len(eval_data['timesteps'])):
+                successes = eval_data['successes'][i]
+                success_rates.append(np.sum(successes)/len(successes))
+
+            all_rewards.append(rewards)
+            all_success_rates.append(success_rates)
+
+        all_rewards_mean = np.mean(all_rewards,axis=0)
+        all_rewards_std = np.std(all_rewards,axis=0)/np.sqrt(np.shape(all_rewards)[0])
+        all_success_rates_mean = np.mean(all_success_rates,axis=0)
+        all_success_rates_std = np.std(all_success_rates,axis=0)
+
         mpl.rcParams["font.size"]=16
         ax_rewards.tick_params(axis="x", labelsize=14)
         ax_rewards.tick_params(axis="y", labelsize=14)
-        ax_rewards.plot(timesteps,np.mean(rewards,axis=1),linewidth=2,label=eval_agent,c=colors[idx],zorder=5-idx)
+        ax_rewards.plot(timesteps,all_rewards_mean,linewidth=2,label=eval_agent,c=colors[idx],zorder=5-idx)
+        ax_rewards.fill_between(timesteps,all_rewards_mean+all_rewards_std,all_rewards_mean-all_rewards_std,alpha=0.2,color=colors[idx],zorder=5-idx)
         ax_rewards.xaxis.set_ticks(np.arange(0,eval_data['timesteps'][-1]+1,200000))
         scale_x = 1e-5
         ticks_x = ticker.FuncFormatter(lambda x, pos:'{0:g}'.format(x*scale_x))
@@ -48,7 +55,8 @@ if __name__ == "__main__":
 
         ax_success_rate.tick_params(axis="x", labelsize=14)
         ax_success_rate.tick_params(axis="y", labelsize=14)
-        ax_success_rate.plot(timesteps,success_rates,linewidth=2,label=eval_agent,c=colors[idx],zorder=5-idx)
+        ax_success_rate.plot(timesteps,all_success_rates_mean,linewidth=2,label=eval_agent,c=colors[idx],zorder=5-idx)
+        ax_success_rate.fill_between(timesteps,all_success_rates_mean+all_success_rates_std,all_success_rates_mean-all_success_rates_std,alpha=0.2,color=colors[idx],zorder=5-idx)
         ax_success_rate.xaxis.set_ticks(np.arange(0,eval_data['timesteps'][-1]+1,200000))
         scale_x = 1e-5
         ticks_x = ticker.FuncFormatter(lambda x, pos:'{0:g}'.format(x*scale_x))

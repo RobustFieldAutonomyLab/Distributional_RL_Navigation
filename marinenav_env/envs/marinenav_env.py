@@ -24,7 +24,7 @@ class Obstacle:
 
 class MarineNavEnv(gym.Env):
 
-    def __init__(self, seed:int=0):
+    def __init__(self, seed:int=0, schedule:dict=None):
 
         self.robot = robot.Robot()
         self.sd = seed
@@ -45,7 +45,8 @@ class MarineNavEnv(gym.Env):
         self.p = 0.8 # max allowable relative speed at another vortex core
         self.v_range = [5,10] # speed range of the vortex (at the edge of core)
         self.obs_r_range = [1,3] # radius range of the obstacle
-        self.clear_r = 5 # radius of area centered at start and goal where no vortex cores or obstacles exist
+        self.clear_r = 10.0 # radius of area centered at start and goal where no vortex cores or obstacles exist
+        self.reset_start_and_goal = True # if the start and goal position be set randomly in the reset function
         self.start = np.array([5.0,5.0]) # robot start position
         self.goal = np.array([45.0,45.0]) # goal position
         self.goal_dis = 2.0 # max distance to goal considered as reached
@@ -58,9 +59,14 @@ class MarineNavEnv(gym.Env):
         self.discount = 0.99
         self.num_cores = 8
         self.num_obs = 5
+        self.min_start_goal_dis = 25.0
 
         self.cores = [] # vortex cores
         self.obstacles = [] # cylinder obstacles
+
+        self.schedule = schedule # schedule for curriculum learning
+        self.episode_timesteps = 0 # current episode timesteps
+        self.total_timesteps = 0 # learning timesteps
 
     def get_state_space_dimension(self):
         return 2 + 2 + 2 * self.robot.sonar.num_beams
@@ -70,26 +76,46 @@ class MarineNavEnv(gym.Env):
 
     def reset(self):
         # reset the environment
+
+        if self.schedule is not None:
+            steps = self.schedule["timesteps"]
+            diffs = np.array(steps) - self.total_timesteps
+            
+            # find the interval the current timestep falls into
+            idx = len(diffs[diffs<=0])-1
+
+            self.num_cores = self.schedule["num_cores"][idx]
+            self.num_obs = self.schedule["num_obstacles"][idx]
+            self.min_start_goal_dis = self.schedule["min_start_goal_dis"][idx]
+
+            print("======== training env setup ========")
+            print("num of cores: ",self.num_cores)
+            print("num of obstacles: ",self.num_obs)
+            print("min start goal dis: ",self.min_start_goal_dis)
+            print("======== training env setup ========\n") 
         
+        self.episode_timesteps = 0
+
         self.cores.clear()
         self.obstacles.clear()
 
         num_cores = self.num_cores
         num_obs = self.num_obs
 
+        if self.reset_start_and_goal:
         # reset start and goal state randomly
-        iteration = 500
-        max_dist = 0.0
-        while True:
-            start = self.rd.uniform(low = 5.0*np.ones(2), high = np.array([self.width-5.0,self.height-5.0]))
-            goal = self.rd.uniform(low = 5.0*np.ones(2), high = np.array([self.width-5.0,self.height-5.0]))
-            iteration -= 1
-            if np.linalg.norm(goal-start) > max_dist:
-                max_dist = np.linalg.norm(goal-start)
-                self.start = start
-                self.goal = goal
-            if max_dist > 25.0 or iteration == 0:
-                break
+            iteration = 500
+            max_dist = 0.0
+            while True:
+                start = self.rd.uniform(low = 2.0*np.ones(2), high = np.array([self.width-2.0,self.height-2.0]))
+                goal = self.rd.uniform(low = 2.0*np.ones(2), high = np.array([self.width-2.0,self.height-2.0]))
+                iteration -= 1
+                if np.linalg.norm(goal-start) > max_dist:
+                    max_dist = np.linalg.norm(goal-start)
+                    self.start = start
+                    self.goal = goal
+                if max_dist > self.min_start_goal_dis or iteration == 0:
+                    break
 
         # generate vortex with random position, spinning direction and strength
         if num_cores > 0:
@@ -123,7 +149,7 @@ class MarineNavEnv(gym.Env):
         if num_obs > 0:
             iteration = 500
             while True:
-                center = self.rd.uniform(low = np.zeros(2), high = np.array([self.width,self.height]))
+                center = self.rd.uniform(low = 5.0*np.ones(2), high = np.array([self.width-5.0,self.height-5.0]))
                 r = self.rd.uniform(low = self.obs_r_range[0], high = self.obs_r_range[1])
                 obs = Obstacle(center[0],center[1],r)
                 iteration -= 1
@@ -196,7 +222,10 @@ class MarineNavEnv(gym.Env):
         # if diff_angle > 0.25*self.robot.sonar.angle:
         #     reward += self.angle_penalty * diff_angle
 
-        if self.check_collision():
+        if self.episode_timesteps >= 1000:
+            done = True
+            info = {"state":"too long episode"}
+        elif self.check_collision():
             reward += self.collision_penalty
             done = True
             info = {"state":"collision"}
@@ -207,6 +236,9 @@ class MarineNavEnv(gym.Env):
         else:
             done = False
             info = {"state":"normal"}
+
+        self.episode_timesteps += 1
+        self.total_timesteps += 1
 
         return obs, reward, done, info
 
@@ -408,6 +440,8 @@ class MarineNavEnv(gym.Env):
             return Gamma / (2*np.pi*d)
 
     def reset_with_eval_config(self,eval_config):
+        self.episode_timesteps = 0
+        
         # load env config
         self.sd = eval_config["env"]["seed"]
         self.width = eval_config["env"]["width"]

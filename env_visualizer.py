@@ -415,9 +415,12 @@ class EnvVisualizer:
             self.episode_actions_quantiles = episode["robot"]["actions_quantiles"]
             self.episode_actions_taus = episode["robot"]["actions_taus"]
 
-    def load_episode_from_eval_file(self,filename,id):
-        eval_file = np.load(filename,allow_pickle=True)
-        episode = copy.deepcopy(eval_file["episode_data"][id])
+    def load_episode_from_eval_files(self,config_f,eval_f,eval_id,env_id):
+        with open(config_f,"r") as f:
+            episodes = json.load(f)
+        episode = episodes[f"env_{env_id}"]
+        eval_file = np.load(eval_f,allow_pickle=True)
+        episode["robot"]["action_history"] = copy.deepcopy(eval_file["actions"][eval_id][env_id])
         self.load_episode(episode)
 
     def load_episode_from_json_file(self,filename):

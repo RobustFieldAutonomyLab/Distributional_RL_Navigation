@@ -113,7 +113,7 @@ class IQNAgent():
         while self.current_timestep <= total_timesteps:
             eps = self.linear_eps(total_timesteps)
             action = self.act(state,eps)
-            next_state, reward, done, _ = train_env.step(action)
+            next_state, reward, done, info = train_env.step(action)
 
             ep_reward += train_env.discount ** ep_length * reward
             ep_length += 1
@@ -157,6 +157,7 @@ class IQNAgent():
                     print("======== training info ========")
                     print("current ep_length: ",ep_length)
                     print("current ep_reward: ",ep_reward)
+                    print("current ep_result: ",info["state"])
                     print("episodes_num: ",ep_num)
                     print("exploration_rate: ",eps)
                     print("current_timesteps: ",self.current_timestep)
@@ -345,7 +346,7 @@ class IQNAgent():
                 if greedy:
                     action = self.act(observation,eps=0.0)
                 else:
-                    action = self.act_adaptive(observation,eps=0.0)    
+                    action,_ = self.act_adaptive(observation,eps=0.0)    
                 observation, reward, done, info = eval_env.step(action)
                 cumulative_reward += eval_env.discount ** length * reward
                 length += 1
@@ -363,8 +364,9 @@ class IQNAgent():
         
         avg_r = np.mean(reward_data)
         success_rate = np.sum(success_data)/len(success_data)
-        avg_t = np.mean(time_data)
-        avg_e = np.mean(energy_data)
+        idx = np.where(success_data == 1)[0]
+        avg_t = np.mean(time_data[idx])
+        avg_e = np.mean(energy_data[idx])
 
         policy = "greedy" if greedy else "adaptive"
         print(f"++++++++ Evaluation info ({policy} IQN) ++++++++")

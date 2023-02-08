@@ -135,10 +135,17 @@ class ObsEncoder(nn.Module):
         self.hidden_layer_2 = nn.Linear(64, 64)
         self.output_layer = nn.Linear(64, action_size)
 
+        # temp for reproducibility
+        # self.taus = None
+
     def calc_cos(self, batch_size, n_tau=8, cvar=1.0):
         """
         Calculating the cosinus values depending on the number of tau samples
         """
+        # temp for reproducibility
+        # if self.taus is None:
+        #     t = np.arange(0.05,1,0.03).astype(np.float32)
+        #     self.taus = torch.from_numpy(t).to(self.device).unsqueeze(-1) # (batch_size, n_tau, 1) for broadcast
         taus = torch.rand(batch_size, n_tau).to(self.device).unsqueeze(-1) # (batch_size, n_tau, 1) for broadcast
         #print(taus)
 

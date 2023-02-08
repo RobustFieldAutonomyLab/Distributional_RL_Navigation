@@ -81,15 +81,24 @@ def run_trial(device,params):
     param_file = os.path.join(exp_dir,"trial_config.json")
     with open(param_file, 'w+') as outfile:
         json.dump(params, outfile)
+
+    # schedule of curriculum training
+    training_schedule = dict(timesteps=[0,1000000,2000000],
+                             num_cores=[4,6,8],
+                             num_obstacles=[6,8,10],
+                             min_start_goal_dis=[30.0,35.0,40.0],
+                             )
     
-    train_env = gym.make('marinenav_env:marinenav_env-v0',seed=params["seed"])
+    schedule_file = os.path.join(exp_dir,"training_schedule.json")
+    with open(schedule_file, 'w+') as outfile:
+        json.dump(training_schedule, outfile)
+
+    train_env = gym.make('marinenav_env:marinenav_env-v0',seed=params["seed"],schedule=training_schedule)
     
+    # evaluation environment configs
     eval_config = {}
     eval_env = gym.make('marinenav_env:marinenav_env-v0',seed=348)
     print("Creating 30 evaluation environments\n")
-    # for i in range(30):
-    #     env.reset()
-    #     eval_config[f"env_{i}"] = env.episode_data()
     eval_config = create_eval_configs(eval_env)
 
     eval_config_file = os.path.join(exp_dir,"eval_config.json")
@@ -114,77 +123,27 @@ def run_trial(device,params):
 def create_eval_configs(eval_env):
     eval_config = {}
 
-    eval_env.obs_r_range = [1,1]
-    eval_env.num_obs = 6
-    eval_env.start = np.array([6.0,6.0])
-    eval_env.goal = np.array([44.0,44.0])
+    # varying the number of cores and obstacles to adjust the level of difficulty
+    num_episodes = [10,10,10]
+    num_cs = [4,6,8]
+    num_os = [6,8,10]
 
-    for i in range(30): 
-        eval_env.cores.clear()
-        eval_env.obstacles.clear()
+    eval_env.obs_r_range = [1,3]
+    eval_env.reset_start_and_goal = False
+    eval_env.start = np.array([5.0,5.0])
+    eval_env.goal = np.array([45.0,45.0])
 
-        num_cores = eval_env.num_cores
-        num_obs = eval_env.num_obs
+    count = 0
+    for i,num_episode in enumerate(num_episodes):
+        for _ in range(num_episode): 
+            eval_env.num_cores = num_cs[i]
+            eval_env.num_obs = num_os[i]
 
-        # generate vortex with random position, spinning direction and strength
-        if num_cores > 0:
-            iteration = 500
-            while True:
-                center = eval_env.rd.uniform(low = np.zeros(2), high = np.array([eval_env.width,eval_env.height]))
-                direction = eval_env.rd.binomial(1,0.5)
-                v_edge = eval_env.rd.uniform(low = eval_env.v_range[0], high = eval_env.v_range[1])
-                Gamma = 2 * np.pi * eval_env.r * v_edge
-                core = marinenav_env.Core(center[0],center[1],direction,Gamma)
-                iteration -= 1
-                if eval_env.check_core(core):
-                    eval_env.cores.append(core)
-                    num_cores -= 1
-                if iteration == 0 or num_cores == 0:
-                    break
-        
-        centers = None
-        for core in eval_env.cores:
-            if centers is None:
-                centers = np.array([[core.x,core.y]])
-            else:
-                c = np.array([[core.x,core.y]])
-                centers = np.vstack((centers,c))
-    
-        # KDTree storing vortex core center positions
-        if centers is not None:
-            eval_env.core_centers = scipy.spatial.KDTree(centers)
+            eval_env.reset()
 
-        # generate obstacles with random position in [10,40]
-        if num_obs > 0:
-            iteration = 500
-            while True:
-                center = eval_env.rd.uniform(low = 10*np.ones(2), high = 40*np.ones(2))
-                r = 1.0
-                obs = marinenav_env.Obstacle(center[0],center[1],r)
-                iteration -= 1
-                if eval_env.check_obstacle(obs):
-                    eval_env.obstacles.append(obs)
-                    num_obs -= 1
-                if iteration == 0 or num_obs == 0:
-                    break
-
-        centers = None
-        for obs in eval_env.obstacles:
-            if centers is None:
-                centers = np.array([[obs.x,obs.y]])
-            else:
-                c = np.array([[obs.x,obs.y]])
-                centers = np.vstack((centers,c))
-        
-        # KDTree storing obstacle center positions
-        if centers is not None: 
-            eval_env.obs_centers = scipy.spatial.KDTree(centers)
-
-        # reset robot state
-        eval_env.reset_robot()
-
-        # save eval config
-        eval_config[f"env_{i}"] = eval_env.episode_data()
+            # save eval config
+            eval_config[f"env_{count}"] = eval_env.episode_data()
+            count += 1
 
     return eval_config
 
