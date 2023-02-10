@@ -46,8 +46,11 @@ class MarineNavEnv(gym.Env):
         self.v_range = [5,10] # speed range of the vortex (at the edge of core)
         self.obs_r_range = [1,3] # radius range of the obstacle
         self.clear_r = 10.0 # radius of area centered at start and goal where no vortex cores or obstacles exist
-        self.reset_start_and_goal = True # if the start and goal position be set randomly in the reset function
+        self.reset_start_and_goal = True # if the start and goal position be set randomly in reset()
         self.start = np.array([5.0,5.0]) # robot start position
+        self.random_reset_state = True # if initial state of the robot be set randomly in reset_robot()
+        self.init_speed = 0.0 # robot initial forword speed
+        self.init_theta = np.pi/4 # robot initial orientation angle
         self.goal = np.array([45.0,45.0]) # goal position
         self.goal_dis = 2.0 # max distance to goal considered as reached
         self.timestep_penalty = -1.0
@@ -67,6 +70,8 @@ class MarineNavEnv(gym.Env):
         self.schedule = schedule # schedule for curriculum learning
         self.episode_timesteps = 0 # current episode timesteps
         self.total_timesteps = 0 # learning timesteps
+
+        self.set_boundary = False # set boundary of environment
 
     def get_state_space_dimension(self):
         return 2 + 2 + 2 * self.robot.sonar.num_beams
@@ -178,8 +183,12 @@ class MarineNavEnv(gym.Env):
 
     def reset_robot(self):
         # reset robot state
-        self.robot.init_theta = self.rd.uniform(low = 0.0, high = 2*np.pi)
-        self.robot.init_speed = self.rd.uniform(low = 0.0, high = self.robot.max_speed)
+        if self.random_reset_state:
+            self.robot.init_theta = self.rd.uniform(low = 0.0, high = 2*np.pi)
+            self.robot.init_speed = self.rd.uniform(low = 0.0, high = self.robot.max_speed)
+        else:
+            self.robot.init_theta = self.init_theta
+            self.robot.init_speed = self.init_speed
         current_v = self.get_velocity(self.start[0],self.start[1])
         self.robot.reset_state(self.start[0],self.start[1], current_velocity=current_v)
 
@@ -222,7 +231,10 @@ class MarineNavEnv(gym.Env):
         # if diff_angle > 0.25*self.robot.sonar.angle:
         #     reward += self.angle_penalty * diff_angle
 
-        if self.episode_timesteps >= 1000:
+        if self.set_boundary and self.out_of_boundary():
+            done = True
+            info = {"state":"out of boundary"}
+        elif self.episode_timesteps >= 1000:
             done = True
             info = {"state":"too long episode"}
         elif self.check_collision():
@@ -241,6 +253,12 @@ class MarineNavEnv(gym.Env):
         self.total_timesteps += 1
 
         return obs, reward, done, info
+
+    def out_of_boundary(self):
+        # only used when boundary is set
+        x_out = self.robot.x < 0.0 or self.robot.x > self.width
+        y_out = self.robot.y < 0.0 or self.robot.y > self.height
+        return x_out or y_out
 
     def dist_to_goal(self):
         return np.linalg.norm(self.goal - np.array([self.robot.x,self.robot.y]))

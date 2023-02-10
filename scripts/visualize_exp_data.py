@@ -5,8 +5,8 @@ import json
 import numpy as np
 
 if __name__ == "__main__":
-    # filename = "../experiment_data/exp_data_2023-02-06-22-03-31.json"
-    filename = "../experiment_data/exp_data_2023-02-06-22-33-16.json"
+    # filename = "../experiment_data/exp_data_demonstration.json"
+    filename = "../experiment_data/exp_data_2023-02-09-00-20-42.json"
 
     with open(filename,"r") as f:
         exp_data = json.load(f)
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     print(ep_list)
 
     # ep_id = 110
-    ep_id = 208
+    ep_id = 67
 
     plot_agents = ["adaptive_IQN","IQN_1.0"]
     action_sequences = {}
@@ -62,19 +62,21 @@ if __name__ == "__main__":
     # identify the fork state where adaptive IQN and IQN choose different actions for the first time
     fork_state = None
     for i in range(min_len):
-        if action_sequences["adaptive_IQN"][i] != action_sequences["IQN_1.0"][i]:
+        if action_sequences[plot_agents[0]][i] != action_sequences[plot_agents[1]][i]:
             fork_state = {}
             fork_state["id"] = i
-            fork_state["actions_cvars"] = [exp_data["adaptive_IQN"]["ep_data"][ep_id]["robot"]["actions_cvars"][i],
-                                           exp_data["IQN_1.0"]["ep_data"][ep_id]["robot"]["actions_cvars"][i]]
-            fork_state["actions_quantiles"] = [exp_data["adaptive_IQN"]["ep_data"][ep_id]["robot"]["actions_quantiles"][i][0],
-                                               exp_data["IQN_1.0"]["ep_data"][ep_id]["robot"]["actions_quantiles"][i][0]]
+            fork_state["cvars"] = [exp_data[plot_agents[0]]["ep_data"][ep_id]["robot"]["actions_cvars"][i],
+                                   exp_data[plot_agents[1]]["ep_data"][ep_id]["robot"]["actions_cvars"][i]]
+            fork_state["quantiles"] = [exp_data[plot_agents[0]]["ep_data"][ep_id]["robot"]["actions_quantiles"][i][0],
+                                       exp_data[plot_agents[1]]["ep_data"][ep_id]["robot"]["actions_quantiles"][i][0]]
             break
 
     ev = env_visualizer.EnvVisualizer(draw_dist=True,cvar_num=2)
 
-    episode = exp_data["adaptive_IQN"]["ep_data"][ep_id]
+    episode = exp_data[plot_agents[1]]["ep_data"][ep_id]
     ev.load_episode(episode)
+
+    # ev.play_episode()
     
     # Draw trajectorys
     ev.draw_trajectory(only_ep_actions=False,all_actions=action_sequences,fork_state_info=fork_state)

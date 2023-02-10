@@ -2,6 +2,7 @@ import marinenav_env.envs.marinenav_env as marinenav_env
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import matplotlib.animation as animation
 import copy
 import scipy.spatial
@@ -35,13 +36,13 @@ class EnvVisualizer:
         self.episode_actions_taus = None
 
         self.draw_dist = draw_dist # draw return distribution of actions
-        self.draw_traj = draw_traj # plot final trajectories
+        self.draw_traj = draw_traj # draw only final trajectories
 
     def init_visualize(self):
         
         # initialize subplot for the map, robot state and sensor measurments
         if self.draw_traj:
-            self.fig, self.axis_graph = plt.subplots(figsize=(16,16))
+            self.fig, self.axis_graph = plt.subplots(figsize=(8,8))
         elif self.draw_dist:
             assert self.cvar_num > 0, "cvar_num should be greater than 0 if draw_dist"
             self.fig = plt.figure(figsize=(self.cvar_num*4+12,8))
@@ -63,8 +64,8 @@ class EnvVisualizer:
         self.robot_last_pos = None
 
         # plot current velocity in the map
-        x_pos = list(np.linspace(0,self.env.width,100))
-        y_pos = list(np.linspace(0,self.env.height,100))
+        x_pos = list(np.linspace(-2.5,self.env.width+2.5,110))
+        y_pos = list(np.linspace(-2.5,self.env.height+2.5,110))
 
         pos_x = []
         pos_y = []
@@ -74,15 +75,27 @@ class EnvVisualizer:
         for m,x in enumerate(x_pos):
             for n,y in enumerate(y_pos):
                 v = self.env.get_velocity(x,y)
-                speed = np.linalg.norm(v)
+                speed = np.clip(np.linalg.norm(v),0.1,10)
                 pos_x.append(x)
                 pos_y.append(y)
                 arrow_x.append(v[0])
                 arrow_y.append(v[1])
                 speeds[n,m] = np.log(speed)
 
-        self.axis_graph.contourf(x_pos,y_pos,speeds,cmap='Blues')
+
+        cmap = cm.Blues(np.linspace(0,1,20))
+        cmap = mpl.colors.ListedColormap(cmap[10:,:-1])
+
+        self.axis_graph.contourf(x_pos,y_pos,speeds,cmap=cmap)
         self.axis_graph.quiver(pos_x, pos_y, arrow_x, arrow_y, width=0.001)
+
+        # plot the evaluation boundary
+        boundary = np.array([[0.0,0.0],
+                             [self.env.width,0.0],
+                             [self.env.width,self.env.height],
+                             [0.0,self.env.height],
+                             [0.0,0.0]])
+        self.axis_graph.plot(boundary[:,0],boundary[:,1],color = 'r',linestyle="--",linewidth=3)
 
         # plot obstacles in the map
         l = True
@@ -94,8 +107,8 @@ class EnvVisualizer:
                 self.axis_graph.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r,color='m'))
 
         self.axis_graph.set_aspect('equal')
-        self.axis_graph.set_xlim([0.0,self.env.width])
-        self.axis_graph.set_ylim([0.0,self.env.height])
+        self.axis_graph.set_xlim([-2.5,self.env.width+2.5])
+        self.axis_graph.set_ylim([-2.5,self.env.height+2.5])
 
         # plot start and goal state
         self.axis_graph.scatter(self.env.start[0],self.env.start[1],marker="o",color="yellow",s=160,zorder=6,label="start")
@@ -240,12 +253,14 @@ class EnvVisualizer:
         
         dist_interval = 1
         mean_bar = 0.35
+        idx = 0
 
-        for idx,cvar in enumerate(action["actions_cvars"]):
+        xlim = [np.inf,-np.inf]
+        for idx, cvar in enumerate(action["cvars"]):
             ylabelleft=[]
             ylabelright=[]
 
-            quantiles = np.array(action["actions_quantiles"][idx])
+            quantiles = np.array(action["quantiles"][idx])
 
             q_means = np.mean(quantiles,axis=0)
             max_a = np.argmax(q_means)
@@ -270,11 +285,19 @@ class EnvVisualizer:
             self.axis_dist[idx].tick_params(axis="x", labelsize=14)
             self.axis_dist[idx].set_ylim([-1.0,i+1])
             self.axis_dist[idx].set_yticks([])
-            if idx == len(action["actions_cvars"])-1:
+            if idx == len(action["cvars"])-1:
                 self.axis_dist[idx].set_yticks(range(0,i+1))
                 self.axis_dist[idx].yaxis.tick_right()
                 self.axis_dist[idx].set_yticklabels(labels=ylabelright,fontsize=12)
             self.axis_dist[idx].set_title(f"cvar = {cvar:.2f}",fontsize=15)
+
+            xlim[0] = min(xlim[0],np.min(quantiles)-5)
+            xlim[1] = max(xlim[1],np.max(quantiles)+5)
+
+        for idx, cvar in enumerate(action["cvars"]):
+            self.axis_dist[idx].set_xlim(xlim)
+
+        
 
     def one_step(self,action):
         current_velocity = self.env.get_velocity(self.env.robot.x, self.env.robot.y)
@@ -308,12 +331,9 @@ class EnvVisualizer:
                 action = {}
                 action["action"] = a
                 if self.draw_dist:
-                    action["actions_cvars"] = self.episode_actions_cvars
-                    action["actions_quantiles"] = []
-                    action["actions_taus"] = []
-                    for k in range(len(action["actions_cvars"])):
-                        action["actions_quantiles"].append(self.episode_actions_quantiles[k][i])
-                        action["actions_taus"].append(self.episode_actions_taus[k][i])
+                    action["cvars"] = [self.episode_actions_cvars[i]]
+                    action["quantiles"] = [self.episode_actions_quantiles[i][0]]
+                    action["taus"] = [self.episode_actions_taus[i]]
                 actions.append(action)
 
         self.animation = animation.FuncAnimation(self.fig, self.one_step,frames=actions, \
@@ -480,18 +500,16 @@ class EnvVisualizer:
                         traj = np.concatenate((traj,curr))
             trajs.append(traj)
 
-        colors = ['r','lime','tab:orange']
+        colors = ['tab:orange','lime',"r"]
         styles = ['solid','dashed','dashdot']
 
         for i, l in enumerate(all_actions.keys()):
             traj = trajs[i]
-            self.axis_graph.plot(traj[:,0],traj[:,1],label=l,linewidth=3,zorder=5-i,color=colors[i],linestyle=styles[i])
+            self.axis_graph.plot(traj[:,0],traj[:,1],label=l,linewidth=2,zorder=5-i,color=colors[i],linestyle=styles[i])
 
         mpl.rcParams["font.size"]=15
         mpl.rcParams["legend.framealpha"]=0.3
         self.axis_graph.legend(loc='upper left',bbox_to_anchor=(0.35,1.0))
-        self.axis_graph.set_xlim([0,50])
-        self.axis_graph.set_ylim([0,50])
         self.axis_graph.set_xticks([])
         self.axis_graph.set_yticks([])
         

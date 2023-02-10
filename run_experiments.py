@@ -55,6 +55,7 @@ def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False, cvar
         
     # metric data
     success = True if info["state"] == "reach goal" else False
+    out_of_area = True if info["state"] == "out of boundary" else False
     time = test_env.robot.dt * test_env.robot.N * length
 
     ep_data = test_env.episode_data()
@@ -62,7 +63,7 @@ def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False, cvar
     ep_data["robot"]["actions_quantiles"] = [x.tolist() for x in quantiles_data]
     ep_data["robot"]["actions_taus"] = [x.tolist() for x in taus_data]
 
-    return ep_data, success, time, energy
+    return ep_data, success, time, energy, out_of_area
 
 def evaluation_DQN(first_observation, agent, test_env):
     observation = first_observation
@@ -80,9 +81,10 @@ def evaluation_DQN(first_observation, agent, test_env):
         
     # metric data
     success = True if info["state"] == "reach goal" else False
+    out_of_area = True if info["state"] == "out of boundary" else False
     time = test_env.robot.dt * test_env.robot.N * length
 
-    return test_env.episode_data(), success, time, energy
+    return test_env.episode_data(), success, time, energy, out_of_area
 
 def evaluation_classical(first_observation, agent, test_env):
     observation = first_observation
@@ -100,9 +102,10 @@ def evaluation_classical(first_observation, agent, test_env):
 
     # metric data
     success = True if info["state"] == "reach goal" else False
+    out_of_area = True if info["state"] == "out of boundary" else False
     time = test_env.robot.dt * test_env.robot.N * length
 
-    return test_env.episode_data(), success, time, energy
+    return test_env.episode_data(), success, time, energy, out_of_area
 
 def exp_setup_1(envs):
     # keep default env settings
@@ -194,7 +197,7 @@ def exp_setup_3(envs,n_obs,n_cores):
 
     return observations
 
-def exp_setup_4(envs):
+def demonstration(envs):
     # Demonstrate that RL agents are clearly better in adverse flow field
     observations = []
 
@@ -265,11 +268,14 @@ def exp_setup_5(envs,n_obs,n_cores):
     observations = []
 
     for test_env in envs:
-
-        test_env.obs_r_range = [1,3]
         test_env.reset_start_and_goal = False
+        test_env.random_reset_state = False
+        test_env.set_boundary = True
+        test_env.obs_r_range = [1,3]
         test_env.start = np.array([5.0,5.0])
         test_env.goal = np.array([45.0,45.0])
+
+        test_env.robot.N = 5
 
         test_env.num_cores = n_cores
         test_env.num_obs = n_obs
@@ -279,7 +285,7 @@ def exp_setup_5(envs,n_obs,n_cores):
     return observations
 
 def run_experiment(n_obs,n_cores):
-    num = 500
+    num = 1
     agents = [IQN_agent_0,IQN_agent_1,IQN_agent_2,IQN_agent_3,IQN_agent_4,DQN_agent_1,APF_agent,BA_agent]
     names = ["adaptive_IQN","IQN_0.25","IQN_0.5","IQN_0.75","IQN_1.0","DQN","APF","BA"]
     envs = [test_env_0,test_env_1,test_env_2,test_env_3,test_env_4,test_env_5,test_env_6,test_env_7]
@@ -291,11 +297,11 @@ def run_experiment(n_obs,n_cores):
 
     exp_data = {}
     for name in names:
-        exp_data[name] = dict(ep_data=[],success=[],time=[],energy=[])
+        exp_data[name] = dict(ep_data=[],success=[],time=[],energy=[],out_of_area=[])
 
     print(f"Running {num} experiments\n")
     for i in range(num):
-        observations = exp_setup_5(envs,n_obs,n_cores)
+        observations = demonstration(envs)
         for j in range(len(agents)):
             agent = agents[j]
             env = envs[j]
@@ -306,36 +312,38 @@ def run_experiment(n_obs,n_cores):
             obs = observations[j]
             
             if name == "adaptive_IQN":
-                ep_data, success, time, energy = evaluation(obs,agent,env,adaptive=True)
+                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env,adaptive=True)
             elif name == "IQN_0.25":
-                ep_data, success, time, energy = evaluation(obs,agent,env,cvar=0.25)
+                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env,cvar=0.25)
             elif name == "IQN_0.5":
-                ep_data, success, time, energy = evaluation(obs,agent,env,cvar=0.5)
+                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env,cvar=0.5)
             elif name == "IQN_0.75":
-                ep_data, success, time, energy = evaluation(obs,agent,env,cvar=0.75)
+                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env,cvar=0.75)
             else:
-                ep_data, success, time, energy = evaluation(obs,agent,env)
+                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env)
             
             exp_data[name]["ep_data"].append(ep_data)
             exp_data[name]["success"].append(success)
             exp_data[name]["time"].append(time)
             exp_data[name]["energy"].append(energy)
+            exp_data[name]["out_of_area"].append(out_of_area)
 
 
-        if (i+1) % 10 == 0:
+        if (i+0) % 10 == 0:
             print(f"=== Finish {i+1} experiments ===")
 
             for k in range(len(agents)):
                 name = names[k]
                 res = np.array(exp_data[name]["success"])
                 idx = np.where(res == 1)[0]
-                rate = np.sum(res)/(i+1)
+                s_rate = np.sum(res)/(i+1)
+                o_rate = np.sum(exp_data[name]["out_of_area"])/(i+1)
                 
                 t = np.array(exp_data[name]["time"])
                 e = np.array(exp_data[name]["energy"])
                 avg_t = np.mean(t[idx])
                 avg_e = np.mean(e[idx])
-                print(f"{name} | success rate: {rate:.2f} | avg_time: {avg_t:.2f} | avg_energy: {avg_e:.2f}")
+                print(f"{name} | success rate: {s_rate:.2f} | out of area rate: {o_rate:.2f} | avg_time: {avg_t:.2f} | avg_energy: {avg_e:.2f}")
             
             print("\n")
 
@@ -444,6 +452,6 @@ if __name__ == "__main__":
     BA_agent = BA.BA_agent(test_env_7.robot.a,test_env_7.robot.w)
     ##### BA #####
 
-    for n_obs,n_cores in [[10,8],[6,4]]: 
+    for n_obs,n_cores in [[10,8]]: 
         run_experiment(n_obs,n_cores)
 
