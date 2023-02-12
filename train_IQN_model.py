@@ -108,7 +108,7 @@ def run_trial(device,params):
     model = IQNAgent(train_env.get_state_space_dimension(),
                      train_env.get_action_space_dimension(),
                      device=device,
-                     seed=1)
+                     seed=params["seed"]+100)
 
     model.learn(total_timesteps=params["total_timesteps"],
                 train_env=train_env,

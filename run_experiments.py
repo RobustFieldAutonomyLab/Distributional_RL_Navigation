@@ -285,7 +285,7 @@ def exp_setup_5(envs,n_obs,n_cores):
     return observations
 
 def run_experiment(n_obs,n_cores):
-    num = 1
+    num = 500
     agents = [IQN_agent_0,IQN_agent_1,IQN_agent_2,IQN_agent_3,IQN_agent_4,DQN_agent_1,APF_agent,BA_agent]
     names = ["adaptive_IQN","IQN_0.25","IQN_0.5","IQN_0.75","IQN_1.0","DQN","APF","BA"]
     envs = [test_env_0,test_env_1,test_env_2,test_env_3,test_env_4,test_env_5,test_env_6,test_env_7]
@@ -301,7 +301,7 @@ def run_experiment(n_obs,n_cores):
 
     print(f"Running {num} experiments\n")
     for i in range(num):
-        observations = demonstration(envs)
+        observations = exp_setup_5(envs,n_obs,n_cores)
         for j in range(len(agents)):
             agent = agents[j]
             env = envs[j]
@@ -329,7 +329,7 @@ def run_experiment(n_obs,n_cores):
             exp_data[name]["out_of_area"].append(out_of_area)
 
 
-        if (i+0) % 10 == 0:
+        if (i+1) % 10 == 0:
             print(f"=== Finish {i+1} experiments ===")
 
             for k in range(len(agents)):
@@ -357,7 +357,7 @@ if __name__ == "__main__":
     ##### adaptive IQN #####
     test_env_0 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
 
     device = "cuda:0"
 
@@ -372,7 +372,7 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.25 #####
     test_env_1 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
 
     device = "cuda:0"
 
@@ -387,7 +387,7 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.5 #####
     test_env_2 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
 
     device = "cuda:0"
 
@@ -402,7 +402,7 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.75 #####
     test_env_3 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
 
     device = "cuda:0"
 
@@ -417,7 +417,7 @@ if __name__ == "__main__":
     ##### IQN cvar = 1.0 (greedy) #####
     test_env_4 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
 
     device = "cuda:0"
 
@@ -432,7 +432,7 @@ if __name__ == "__main__":
     ##### DQN #####
     test_env_5 = marinenav_env.MarineNavEnv(seed)
     
-    save_dir = "training_data/training_2023-02-08-00-13-06/seed_3"
+    save_dir = "training_data/training_2023-02-10-14-51-31/seed_4"
     model_file = "latest_model.zip"
 
     DQN_agent_1 = DQN.load(os.path.join(save_dir,model_file),print_system_info=False)
@@ -452,6 +452,6 @@ if __name__ == "__main__":
     BA_agent = BA.BA_agent(test_env_7.robot.a,test_env_7.robot.w)
     ##### BA #####
 
-    for n_obs,n_cores in [[10,8]]: 
+    for n_obs,n_cores in [[10,8],[6,4]]: 
         run_experiment(n_obs,n_cores)
 

@@ -364,9 +364,9 @@ class IQNAgent():
         
         avg_r = np.mean(reward_data)
         success_rate = np.sum(success_data)/len(success_data)
-        idx = np.where(success_data == 1)[0]
-        avg_t = np.mean(time_data[idx])
-        avg_e = np.mean(energy_data[idx])
+        idx = np.where(np.array(success_data) == 1)[0]
+        avg_t = np.mean(np.array(time_data)[idx])
+        avg_e = np.mean(np.array(energy_data)[idx])
 
         policy = "greedy" if greedy else "adaptive"
         print(f"++++++++ Evaluation info ({policy} IQN) ++++++++")
