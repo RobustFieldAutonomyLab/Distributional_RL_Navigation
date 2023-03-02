@@ -39,7 +39,7 @@ class APF_agent:
             dir_1 = -1.0 * sonar_points[i:i+2] / d_obs
             F_rep_1 = mag_1 * dir_1
 
-            # repulsive force componenct to move towards the goal
+            # repulsive force component to move towards the goal
             mag_2 = (self.n / 2) * self.k_rep * (((1/d_obs)-(1/self.d0))**2) * (d_goal ** (self.n-1))
             dir_2 = -1.0 * goal / d_goal
             F_rep_2 = mag_2 * dir_2

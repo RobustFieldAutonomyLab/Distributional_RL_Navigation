@@ -204,6 +204,8 @@ class MarineNavEnv(gym.Env):
         for _ in range(self.robot.N):
             current_velocity = self.get_velocity(self.robot.x, self.robot.y)
             self.robot.update_state(action,current_velocity)
+            # save trajectory
+            self.robot.trajectory.append([self.robot.x,self.robot.y])
 
         dis_after = self.dist_to_goal()
         
@@ -232,6 +234,7 @@ class MarineNavEnv(gym.Env):
         #     reward += self.angle_penalty * diff_angle
 
         if self.set_boundary and self.out_of_boundary():
+            # No used in training 
             done = True
             info = {"state":"out of boundary"}
         elif self.episode_timesteps >= 1000:
@@ -610,6 +613,7 @@ class MarineNavEnv(gym.Env):
 
         # save action history
         episode["robot"]["action_history"] = copy.deepcopy(self.robot.action_history)
+        episode["robot"]["trajectory"] = copy.deepcopy(self.robot.trajectory)
 
         return episode
 

@@ -47,6 +47,7 @@ class Robot:
         self.init_speed = 0.0 # speed at initial position
 
         self.action_history = [] # history of action commands in one episode
+        self.trajectory = [] # trajectory in one episode
 
     def compute_k(self):
         self.k = np.max(self.a)/self.max_speed
@@ -78,6 +79,7 @@ class Robot:
     def reset_state(self,x,y,current_velocity=np.zeros(2)):
         # only called when resetting the environment
         self.action_history.clear()
+        self.trajectory.clear()
         self.x = x
         self.y = y
         self.theta = self.init_theta 

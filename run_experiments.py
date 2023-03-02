@@ -16,6 +16,7 @@ import scipy.spatial
 import env_visualizer
 import json
 from datetime import datetime
+import time as t_module
 
 def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False, cvar=1.0):
     observation = first_observation
@@ -28,14 +29,21 @@ def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False, cvar
     taus_data = []
 
     cvars = []
+    computation_times = []
 
     while not done and length < 1000:
         action = None
         if adaptive:
+            start = t_module.time()
             (action, quantiles, taus), cvar = agent.act_adaptive_eval(observation)
+            end = t_module.time()
+            computation_times.append(end-start)
             cvars.append(cvar)
         else:
+            start = t_module.time()
             action, quantiles, taus = agent.act_eval(observation,cvar=cvar)
+            end = t_module.time()
+            computation_times.append(end-start)
             cvars.append(cvar)
 
         quantiles_data.append(quantiles)
@@ -63,7 +71,7 @@ def evaluation_IQN(first_observation, agent, test_env, adaptive:bool=False, cvar
     ep_data["robot"]["actions_quantiles"] = [x.tolist() for x in quantiles_data]
     ep_data["robot"]["actions_taus"] = [x.tolist() for x in taus_data]
 
-    return ep_data, success, time, energy, out_of_area
+    return ep_data, success, time, energy, out_of_area, computation_times
 
 def evaluation_DQN(first_observation, agent, test_env):
     observation = first_observation
@@ -72,8 +80,13 @@ def evaluation_DQN(first_observation, agent, test_env):
     done = False
     energy = 0.0
 
+    computation_times = []
+
     while not done and length < 1000:
+        start = t_module.time()
         action, _ = agent.predict(observation,deterministic=True)
+        end = t_module.time()
+        computation_times.append(end-start)
         observation, reward, done, info = test_env.step(int(action))
         cumulative_reward += test_env.discount ** length * reward
         length += 1
@@ -84,7 +97,7 @@ def evaluation_DQN(first_observation, agent, test_env):
     out_of_area = True if info["state"] == "out of boundary" else False
     time = test_env.robot.dt * test_env.robot.N * length
 
-    return test_env.episode_data(), success, time, energy, out_of_area
+    return test_env.episode_data(), success, time, energy, out_of_area, computation_times
 
 def evaluation_classical(first_observation, agent, test_env):
     observation = first_observation
@@ -92,9 +105,14 @@ def evaluation_classical(first_observation, agent, test_env):
     length = 0
     done = False
     energy = 0.0
+
+    computation_times = []
     
     while not done and length < 1000:
+        start = t_module.time()
         action = agent.act(observation)
+        end = t_module.time()
+        computation_times.append(end-start)
         observation, reward, done, info = test_env.step(int(action))
         cumulative_reward += test_env.discount ** length * reward
         length += 1
@@ -105,7 +123,7 @@ def evaluation_classical(first_observation, agent, test_env):
     out_of_area = True if info["state"] == "out of boundary" else False
     time = test_env.robot.dt * test_env.robot.N * length
 
-    return test_env.episode_data(), success, time, energy, out_of_area
+    return test_env.episode_data(), success, time, energy, out_of_area, computation_times
 
 def exp_setup_1(envs):
     # keep default env settings
@@ -297,7 +315,7 @@ def run_experiment(n_obs,n_cores):
 
     exp_data = {}
     for name in names:
-        exp_data[name] = dict(ep_data=[],success=[],time=[],energy=[],out_of_area=[])
+        exp_data[name] = dict(ep_data=[],success=[],time=[],energy=[],out_of_area=[],computation_times=[])
 
     print(f"Running {num} experiments\n")
     for i in range(num):
@@ -312,22 +330,23 @@ def run_experiment(n_obs,n_cores):
             obs = observations[j]
             
             if name == "adaptive_IQN":
-                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env,adaptive=True)
+                ep_data, success, time, energy, out_of_area, computation_times = evaluation(obs,agent,env,adaptive=True)
             elif name == "IQN_0.25":
-                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env,cvar=0.25)
+                ep_data, success, time, energy, out_of_area, computation_times = evaluation(obs,agent,env,cvar=0.25)
             elif name == "IQN_0.5":
-                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env,cvar=0.5)
+                ep_data, success, time, energy, out_of_area, computation_times = evaluation(obs,agent,env,cvar=0.5)
             elif name == "IQN_0.75":
-                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env,cvar=0.75)
+                ep_data, success, time, energy, out_of_area, computation_times = evaluation(obs,agent,env,cvar=0.75)
             else:
-                ep_data, success, time, energy, out_of_area = evaluation(obs,agent,env)
+                ep_data, success, time, energy, out_of_area, computation_times = evaluation(obs,agent,env)
             
             exp_data[name]["ep_data"].append(ep_data)
             exp_data[name]["success"].append(success)
             exp_data[name]["time"].append(time)
             exp_data[name]["energy"].append(energy)
             exp_data[name]["out_of_area"].append(out_of_area)
-
+            for compute_t in computation_times:
+                 exp_data[name]["computation_times"].append(compute_t)
 
         if (i+1) % 10 == 0:
             print(f"=== Finish {i+1} experiments ===")
@@ -343,7 +362,10 @@ def run_experiment(n_obs,n_cores):
                 e = np.array(exp_data[name]["energy"])
                 avg_t = np.mean(t[idx])
                 avg_e = np.mean(e[idx])
-                print(f"{name} | success rate: {s_rate:.2f} | out of area rate: {o_rate:.2f} | avg_time: {avg_t:.2f} | avg_energy: {avg_e:.2f}")
+
+                avg_comput_t = np.mean(exp_data[name]["computation_times"])
+                
+                print(f"{name} | success rate: {s_rate:.2f} | out of area rate: {o_rate:.2f} | avg_time: {avg_t:.2f} | avg_energy: {avg_e:.2f} | avg_compute_t: {avg_comput_t}")
             
             print("\n")
 
@@ -357,9 +379,10 @@ if __name__ == "__main__":
     ##### adaptive IQN #####
     test_env_0 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
+    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
 
-    device = "cuda:0"
+    # device = "cuda:0"
+    device = "cpu"
 
     IQN_agent_0 = IQNAgent(test_env_0.get_state_space_dimension(),
                          test_env_0.get_action_space_dimension(),
@@ -372,9 +395,10 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.25 #####
     test_env_1 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
+    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
 
-    device = "cuda:0"
+    # device = "cuda:0"
+    device = "cpu"
 
     IQN_agent_1 = IQNAgent(test_env_1.get_state_space_dimension(),
                          test_env_1.get_action_space_dimension(),
@@ -387,9 +411,10 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.5 #####
     test_env_2 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
+    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
 
-    device = "cuda:0"
+    # device = "cuda:0"
+    device = "cpu"
 
     IQN_agent_2 = IQNAgent(test_env_2.get_state_space_dimension(),
                          test_env_2.get_action_space_dimension(),
@@ -402,9 +427,10 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.75 #####
     test_env_3 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
+    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
 
-    device = "cuda:0"
+    # device = "cuda:0"
+    device = "cpu"
 
     IQN_agent_3 = IQNAgent(test_env_3.get_state_space_dimension(),
                          test_env_3.get_action_space_dimension(),
@@ -417,9 +443,10 @@ if __name__ == "__main__":
     ##### IQN cvar = 1.0 (greedy) #####
     test_env_4 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-10-14-48-11/seed_4"
+    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
 
-    device = "cuda:0"
+    # device = "cuda:0"
+    device = "cpu"
 
     IQN_agent_4 = IQNAgent(test_env_4.get_state_space_dimension(),
                          test_env_4.get_action_space_dimension(),
@@ -432,10 +459,12 @@ if __name__ == "__main__":
     ##### DQN #####
     test_env_5 = marinenav_env.MarineNavEnv(seed)
     
-    save_dir = "training_data/training_2023-02-10-14-51-31/seed_4"
+    save_dir = "training_data/training_2023-02-08-00-13-06/seed_3"
     model_file = "latest_model.zip"
 
-    DQN_agent_1 = DQN.load(os.path.join(save_dir,model_file),print_system_info=False)
+    # device = "cuda:0"
+    device = "cpu"
+    DQN_agent_1 = DQN.load(os.path.join(save_dir,model_file),print_system_info=False,device=device)
     ##### DQN #####
 
 
