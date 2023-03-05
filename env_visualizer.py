@@ -13,10 +13,13 @@ class EnvVisualizer:
 
     def __init__(self, 
                  seed:int=0, 
-                 draw_dist:bool=False, # mode 2: adding action return distributions (for IQN agent)
-                 cvar_num:int=0, # number of CVaR (only available in mode 2)
-                 draw_traj:bool=False, # mode 3: only visualize final trajectories given action sequences
-                 draw_envs:bool=False # mode 4: plots training envrionments
+                 cvar_num:int=0, # Number of CVaR (only available in mode 5)
+                 draw_envs:bool=False, # Mode 2: plot the envrionment
+                 draw_traj:bool=False, # Mode 3: plot final trajectories given action sequences
+                 video_plots:bool=False, # Mode 4: Generate plots for a video
+                 plot_dist:bool=False, # If return distributions are needed (for IQN agent) in the video
+                 plot_qvalues:bool=False, # If Q values are needed in the video
+                 dpi:int=96, # Monitor DPI
                  ): 
         self.env = marinenav_env.MarineNavEnv(seed)
         self.env.reset()
@@ -26,40 +29,107 @@ class EnvVisualizer:
         self.robot_last_pos = None
         self.robot_traj_plot = []
         self.sonar_beams_plot = []
+        self.axis_title = None # sub figure for title
         self.axis_action = None # sub figure for action command and steer data
+        self.axis_goal = None # sub figure for relative goal measurment
         self.axis_sonar = None # sub figure for Sonar measurement
         self.axis_dvl = None # sub figure for DVL measurement
         self.axis_dist = [] # sub figure(s) for return distribution of actions
+        self.axis_qvalues = None # subfigure for Q values of actions
         self.cvar_num = cvar_num # number of CVaR values to plot
 
         self.episode_actions = [] # action sequence load from episode data
         self.episode_actions_quantiles = None
         self.episode_actions_taus = None
 
-        self.draw_dist = draw_dist # draw return distribution of actions
-        self.draw_traj = draw_traj # draw only final trajectories
+        self.plot_dist = plot_dist # draw return distribution of actions
+        self.plot_qvalues = plot_qvalues # draw Q values of actions
         self.draw_envs = draw_envs # draw only the envs
+        self.draw_traj = draw_traj # draw only final trajectories
+        self.video_plots = video_plots # draw video plots
+        self.plots_save_dir = None # video plots save directory 
+        self.dpi = dpi # monitor DPI
+        self.agent = None # agent name 
 
     def init_visualize(self,
-                       env_configs=None # used to draw envs
+                       env_configs=None # used in Mode 2
                        ):
         
         # initialize subplot for the map, robot state and sensor measurments
         if self.draw_envs:
+            # Mode 2: plot final trajectories given action sequences
             self.fig, self.axis_graphs = plt.subplots(1,len(env_configs),figsize=(24,8))
         elif self.draw_traj:
+            # Mode 3: plot the envrionment
             self.fig, self.axis_graph = plt.subplots(figsize=(8,8))
-        elif self.draw_dist:
-            assert self.cvar_num > 0, "cvar_num should be greater than 0 if draw_dist"
-            self.fig = plt.figure(figsize=(self.cvar_num*4+12,8))
-            spec = self.fig.add_gridspec(5,3+self.cvar_num)
-            self.axis_action = self.fig.add_subplot(spec[0,0])
-            self.axis_sonar = self.fig.add_subplot(spec[1:3,0])
-            self.axis_dvl = self.fig.add_subplot(spec[3:,0])
-            self.axis_graph = self.fig.add_subplot(spec[:,1:3])
-            for i in range(self.cvar_num):
-                self.axis_dist.append(self.fig.add_subplot(spec[:,3+i]))
+        elif self.video_plots:
+            # Mode 4: Generate 1080p video plots
+            w = 1920
+            h = 1080
+            self.fig = plt.figure(figsize=(w/self.dpi,h/self.dpi),dpi=self.dpi)
+            if self.plot_dist:
+                assert self.cvar_num > 0, "cvar_num should be greater than 0 if plot_dist"
+                spec = self.fig.add_gridspec(7,3+self.cvar_num)
+                
+                self.axis_title = self.fig.add_subplot(spec[0:2,:])
+                self.axis_title.text(-0.9,0.5,"Adaptive IQN performance",fontweight="bold",fontsize=45)
+                self.axis_title.text(-0.9,0,"1. Equivalent to a greedy agent when no obstcles are detected",fontsize=20)
+                self.axis_title.text(-0.9,-0.5,"2. Risk sensitivity increases when approaching obstacles",fontsize=20)
+
+                self.axis_goal = self.fig.add_subplot(spec[2,0])
+                self.axis_sonar = self.fig.add_subplot(spec[3:5,0])
+                self.axis_dvl = self.fig.add_subplot(spec[5:,0])
+                self.axis_graph = self.fig.add_subplot(spec[2:,1:3])
+                for i in range(self.cvar_num):
+                    self.axis_dist.append(self.fig.add_subplot(spec[2:,3+i]))
+            elif self.plot_qvalues:
+                spec = self.fig.add_gridspec(13,4)
+
+                self.axis_title = self.fig.add_subplot(spec[0:3,:])
+                self.axis_title.text(-0.9,0,"DQN performance",fontweight="bold",fontsize=45)
+                self.axis_title.text(-0.9,-0.5,"Robust to current disturbance in robot motion, but not cautious enough when approaching obstacles", fontsize=20)
+
+                self.axis_goal = self.fig.add_subplot(spec[3:5,0])
+                self.axis_sonar = self.fig.add_subplot(spec[5:9,0])
+                self.axis_dvl = self.fig.add_subplot(spec[9:,0])
+                self.axis_graph = self.fig.add_subplot(spec[3:,1:3])
+                self.axis_qvalues = self.fig.add_subplot(spec[3:,3])
+            else:
+                name = ""
+                if self.agent == "APF":
+                    name = "Artificial Potential Field"
+                elif self.agent == "BA":
+                    name = "Bug Algorithm" 
+                spec = self.fig.add_gridspec(13,8)
+
+                self.axis_title = self.fig.add_subplot(spec[0:3,:])
+                self.axis_title.text(-0.9,0,f"{name} performance",fontweight="bold",fontsize=45)
+                self.axis_title.text(-0.9,-0.5,"Significantly affected by current disturbance", fontsize=20)
+
+                self.left_margin = self.fig.add_subplot(spec[3:5,0])
+                self.left_margin.set_xticks([])
+                self.left_margin.set_yticks([])
+                self.left_margin.spines["left"].set_visible(False)
+                self.left_margin.spines["top"].set_visible(False)
+                self.left_margin.spines["right"].set_visible(False)
+                self.left_margin.spines["bottom"].set_visible(False)
+
+                self.axis_goal = self.fig.add_subplot(spec[3:5,1:3])
+                self.axis_sonar = self.fig.add_subplot(spec[5:9,1:3])
+                self.axis_dvl = self.fig.add_subplot(spec[9:,1:3])
+                self.axis_graph = self.fig.add_subplot(spec[3:,3:7])
+                self.axis_action = self.fig.add_subplot(spec[5:9,7])
+
+            self.axis_title.set_xlim([-1.0,1.0])
+            self.axis_title.set_ylim([-1.0,1.0])
+            self.axis_title.set_xticks([])
+            self.axis_title.set_yticks([])
+            self.axis_title.spines["left"].set_visible(False)
+            self.axis_title.spines["top"].set_visible(False)
+            self.axis_title.spines["right"].set_visible(False)
+            self.axis_title.spines["bottom"].set_visible(False)
         else:
+            # Mode 1 (default): Display an episode
             self.fig = plt.figure(figsize=(24,16))
             spec = self.fig.add_gridspec(5,3)
             self.axis_graph = self.fig.add_subplot(spec[:,:2])
@@ -78,10 +148,12 @@ class EnvVisualizer:
 
     def plot_graph(self,axis):
         # plot current velocity in the map
-        x_pos = list(np.linspace(-2.5,self.env.width+2.5,110))
-        y_pos = list(np.linspace(-2.5,self.env.height+2.5,110))
-        # x_pos = list(np.linspace(0.0,self.env.width,100))
-        # y_pos = list(np.linspace(0.0,self.env.height,100))
+        if self.draw_envs:
+            x_pos = list(np.linspace(0.0,self.env.width,100))
+            y_pos = list(np.linspace(0.0,self.env.height,100))
+        else:
+            x_pos = list(np.linspace(-2.5,self.env.width+2.5,110))
+            y_pos = list(np.linspace(-2.5,self.env.height+2.5,110))
 
         pos_x = []
         pos_y = []
@@ -105,13 +177,14 @@ class EnvVisualizer:
         axis.contourf(x_pos,y_pos,speeds,cmap=cmap)
         axis.quiver(pos_x, pos_y, arrow_x, arrow_y, width=0.001)
 
-        # plot the evaluation boundary
-        boundary = np.array([[0.0,0.0],
-                             [self.env.width,0.0],
-                             [self.env.width,self.env.height],
-                             [0.0,self.env.height],
-                             [0.0,0.0]])
-        axis.plot(boundary[:,0],boundary[:,1],color = 'r',linestyle="-.",linewidth=3)
+        if not self.draw_envs:
+            # plot the evaluation boundary
+            boundary = np.array([[0.0,0.0],
+                                [self.env.width,0.0],
+                                [self.env.width,self.env.height],
+                                [0.0,self.env.height],
+                                [0.0,0.0]])
+            axis.plot(boundary[:,0],boundary[:,1],color = 'r',linestyle="-.",linewidth=3)
 
         # plot obstacles in the map
         l = True
@@ -123,16 +196,18 @@ class EnvVisualizer:
                 axis.add_patch(mpl.patches.Circle((obs.x,obs.y),radius=obs.r,color='m'))
 
         axis.set_aspect('equal')
-        axis.set_xlim([-2.5,self.env.width+2.5])
-        axis.set_ylim([-2.5,self.env.height+2.5])
-        # axis.set_xlim([0.0,self.env.width])
-        # axis.set_ylim([0.0,self.env.height])
+        if self.draw_envs:
+            axis.set_xlim([0.0,self.env.width])
+            axis.set_ylim([0.0,self.env.height])
+        else:
+            axis.set_xlim([-2.5,self.env.width+2.5])
+            axis.set_ylim([-2.5,self.env.height+2.5])
         axis.set_xticks([])
         axis.set_yticks([])
 
         # plot start and goal state
-        axis.scatter(self.env.start[0],self.env.start[1],marker="o",color="yellow",s=320,zorder=6)
-        axis.scatter(self.env.goal[0],self.env.goal[1],marker="*",color="yellow",s=1000,zorder=6)
+        axis.scatter(self.env.start[0],self.env.start[1],marker="o",color="yellow",s=320,zorder=5)
+        axis.scatter(self.env.goal[0],self.env.goal[1],marker="*",color="yellow",s=1000,zorder=5)
     
     def plot_robot(self):
         if self.robot_plot != None:
@@ -147,12 +222,12 @@ class EnvVisualizer:
         angle_d = self.env.robot.theta / np.pi * 180
         self.robot_plot = self.axis_graph.add_patch(mpl.patches.Rectangle(xy,self.env.robot.length, \
                                                    self.env.robot.width,     \
-                                                   color='g',angle=angle_d,zorder=6))
+                                                   color='g',angle=angle_d,zorder=7))
 
         if self.robot_last_pos != None:
             h = self.axis_graph.plot((self.robot_last_pos[0],self.env.robot.x),
                                     (self.robot_last_pos[1],self.env.robot.y),
-                                    color='m')
+                                    color='tab:orange')
             self.robot_traj_plot.append(h)
         
         self.robot_last_pos = [self.env.robot.x, self.env.robot.y]
@@ -161,16 +236,24 @@ class EnvVisualizer:
         self.axis_action.clear()
 
         a,w = self.env.robot.actions[action]
-        self.axis_action.text(0,6,"Steer actions",fontweight="bold",fontsize=15)
-        self.axis_action.text(0,5,f"Acceleration (m/s^2): {a:.2f}",fontsize=12)
-        self.axis_action.text(0,4,f"Angular velocity (rad/s): {w:.2f}",fontsize=12)
-        
-        # robot steer state
-        self.axis_action.text(0,2,"Steer states",fontweight="bold",fontsize=15)
-        self.axis_action.text(0,1,f"Forward speed (m/s): {self.env.robot.speed:.2f}",fontsize=12)
-        self.axis_action.text(0,0,f"Orientation (rad): {self.env.robot.theta:.2f}",fontsize=12)
 
-        self.axis_action.set_ylim([-1.0,7.0])
+        if self.video_plots:
+            self.axis_action.text(0,3,"Action",fontsize=15)
+            self.axis_action.text(0,2,f"a: {a:.2f}",fontsize=15)
+            self.axis_action.text(0,1,f"w: {w:.2f}",fontsize=15)
+            self.axis_action.set_ylim([0,4])
+        else:
+            x_pos = 0.15
+            self.axis_action.text(x_pos,6,"Steer actions",fontweight="bold",fontsize=15)
+            self.axis_action.text(x_pos,5,f"Acceleration (m/s^2): {a:.2f}",fontsize=15)
+            self.axis_action.text(x_pos,4,f"Angular velocity (rad/s): {w:.2f}",fontsize=15)
+            
+            # robot steer state
+            self.axis_action.text(x_pos,2,"Steer states",fontweight="bold",fontsize=15)
+            self.axis_action.text(x_pos,1,f"Forward speed (m/s): {self.env.robot.speed:.2f}",fontsize=15)
+            self.axis_action.text(x_pos,0,f"Orientation (rad): {self.env.robot.theta:.2f}",fontsize=15)
+            self.axis_action.set_ylim([-1,7])
+
         self.axis_action.set_xticks([])
         self.axis_action.set_yticks([])
         self.axis_action.spines["left"].set_visible(False)
@@ -184,7 +267,11 @@ class EnvVisualizer:
         for plot in self.sonar_beams_plot:
             plot[0].remove()
         self.sonar_beams_plot.clear()
-        self.axis_action.clear()
+        if self.video_plots:
+            self.axis_goal.clear()
+
+        legend_size = 12
+        font_size = 15
         
         abs_velocity_r, sonar_points_r, goal_r = self.env.get_observation(for_visualize=True)
         
@@ -198,9 +285,9 @@ class EnvVisualizer:
                 y = self.env.robot.y + 0.5 * (y-self.env.robot.y)
             else:
                 # mark the reflection point
-                self.sonar_beams_plot.append(self.axis_graph.plot(x,y,marker='x',color='r'))
+                self.sonar_beams_plot.append(self.axis_graph.plot(x,y,marker='x',color='r',zorder=6))
 
-            self.sonar_beams_plot.append(self.axis_graph.plot([self.env.robot.x,x],[self.env.robot.y,y],linestyle='--',color='r'))
+            self.sonar_beams_plot.append(self.axis_graph.plot([self.env.robot.x,x],[self.env.robot.y,y],linestyle='--',color='r',zorder=6))
 
         # plot Sonar reflections in the robot frame (rotate x-axis by 90 degree (upward) in the plot)
         low_angle = np.pi/2 + self.env.robot.sonar.beam_angles[0]
@@ -218,7 +305,7 @@ class EnvVisualizer:
         self.axis_sonar.set_xlim([-self.env.robot.sonar.range-1,self.env.robot.sonar.range+1])
         self.axis_sonar.set_ylim([-1,self.env.robot.sonar.range+1])
         self.axis_sonar.set_aspect('equal')
-        self.axis_sonar.set_title('LiDAR Reflections',fontsize=15)
+        self.axis_sonar.set_title('LiDAR Reflections',fontsize=font_size)
 
         self.axis_sonar.set_xticks([])
         self.axis_sonar.set_yticks([])
@@ -246,8 +333,8 @@ class EnvVisualizer:
         self.axis_dvl.set_xlim([-x_range,x_range])
         self.axis_dvl.set_ylim([-1,y_range])
         self.axis_dvl.set_aspect('equal')
-        self.axis_dvl.legend(handles=[h1,h2],loc='lower center')
-        self.axis_dvl.set_title('Velocity Measurement',fontsize=15)
+        self.axis_dvl.legend(handles=[h1,h2],loc='lower center',fontsize=legend_size)
+        self.axis_dvl.set_title('Velocity Measurement',fontsize=font_size)
 
         self.axis_dvl.set_xticks([])
         self.axis_dvl.set_yticks([])
@@ -256,16 +343,19 @@ class EnvVisualizer:
         self.axis_dvl.spines["right"].set_visible(False)
         self.axis_dvl.spines["bottom"].set_visible(False)
 
-        # give goal position info in the robot frame
-        self.axis_action.text(0.15,0.5,"Goal Position (Relative)",fontsize=15)
-        self.axis_action.text(0.28,0.25,f"({goal_r[0]:.2f}, {goal_r[1]:.2f})",fontsize=15)
+        if self.video_plots:
+            # give goal position info in the robot frame
+            x1 = 0.07
+            x2 = x1 + 0.13
+            self.axis_goal.text(x1,0.5,"Goal Position (Relative)",fontsize=font_size)
+            self.axis_goal.text(x2,0.25,f"({goal_r[0]:.2f}, {goal_r[1]:.2f})",fontsize=font_size)
 
-        self.axis_action.set_xticks([])
-        self.axis_action.set_yticks([])
-        self.axis_action.spines["left"].set_visible(False)
-        self.axis_action.spines["top"].set_visible(False)
-        self.axis_action.spines["right"].set_visible(False)
-        self.axis_action.spines["bottom"].set_visible(False)
+            self.axis_goal.set_xticks([])
+            self.axis_goal.set_yticks([])
+            self.axis_goal.spines["left"].set_visible(False)
+            self.axis_goal.spines["top"].set_visible(False)
+            self.axis_goal.spines["right"].set_visible(False)
+            self.axis_goal.spines["bottom"].set_visible(False)
 
     def plot_return_dist(self,action):
         for axis in self.axis_dist:
@@ -277,7 +367,6 @@ class EnvVisualizer:
 
         xlim = [np.inf,-np.inf]
         for idx, cvar in enumerate(action["cvars"]):
-            ylabelleft=[]
             ylabelright=[]
 
             quantiles = np.array(action["quantiles"][idx])
@@ -309,15 +398,43 @@ class EnvVisualizer:
                 self.axis_dist[idx].set_yticks(range(0,i+1))
                 self.axis_dist[idx].yaxis.tick_right()
                 self.axis_dist[idx].set_yticklabels(labels=ylabelright,fontsize=12)
-            self.axis_dist[idx].set_title(r'$\phi$'+f" = {cvar:.2f}",fontsize=15)
-
+            if idx == 0:
+                self.axis_dist[idx].set_title("adpative "+r'$\phi$'+f" = {cvar:.2f}",fontsize=15)
+            else:
+                self.axis_dist[idx].set_title(r'$\phi$'+f" = {cvar:.2f}",fontsize=15)
             xlim[0] = min(xlim[0],np.min(quantiles)-5)
             xlim[1] = max(xlim[1],np.max(quantiles)+5)
 
         for idx, cvar in enumerate(action["cvars"]):
+            # self.axis_dist[idx].xaxis.set_ticks(np.arange(xlim[0],xlim[1]+1,(xlim[1]-xlim[0])/5))
             self.axis_dist[idx].set_xlim(xlim)
 
+    def plot_action_qvalues(self,action):
+        self.axis_qvalues.clear()
+
+        dist_interval = 1
+        mean_bar = 0.35
+        ylabelright=[]
+
+        q_values = np.array(action["qvalues"])
+        max_a = np.argmax(q_values)
+        for i, a in enumerate(self.env.robot.actions):
+            ylabelright.append(
+                "\n".join([f"a: {a[0]:.2f}",f"w: {a[1]:.2f}"])
+            )
+            self.axis_qvalues.axhline(i*dist_interval, color="black", linewidth=1, zorder=0)
+            if i == max_a:
+                self.axis_qvalues.vlines(q_values[i], ymin=i*dist_interval-mean_bar, ymax=i*dist_interval+mean_bar,color="red",linewidth=8)
+            else:
+                self.axis_qvalues.vlines(q_values[i], ymin=i*dist_interval-mean_bar, ymax=i*dist_interval+mean_bar,color="blue",linewidth=5)
         
+        self.axis_qvalues.set_title("Action Values",fontsize=15)
+        self.axis_qvalues.tick_params(axis="x", labelsize=15)
+        self.axis_qvalues.set_ylim([-1.0,i+1])
+        self.axis_qvalues.set_yticks(range(0,i+1))
+        self.axis_qvalues.yaxis.tick_right()
+        self.axis_qvalues.set_yticklabels(labels=ylabelright,fontsize=14)
+        self.axis_qvalues.set_xlim([np.min(q_values)-5,np.max(q_values)+5])
 
     def one_step(self,action):
         current_velocity = self.env.get_velocity(self.env.robot.x, self.env.robot.y)
@@ -325,12 +442,16 @@ class EnvVisualizer:
 
         self.plot_robot()
         self.plot_measurements()
-        self.plot_action_and_steer_state(action["action"])
+        if not self.plot_dist and not self.plot_qvalues:
+            self.plot_action_and_steer_state(action["action"])
         
-        if self.draw_dist and self.dist_step % self.env.robot.N == 0:
-            self.plot_return_dist(action)
+        if self.step % self.env.robot.N == 0:
+            if self.plot_dist:
+                self.plot_return_dist(action)
+            elif self.plot_qvalues:
+                self.plot_action_qvalues(action)
 
-        self.dist_step += 1
+        self.step += 1
 
     def init_animation(self):
         # plot initial robot position
@@ -339,27 +460,36 @@ class EnvVisualizer:
         # plot initial DVL and Sonar measurments
         self.plot_measurements() 
 
-    def visualize_control(self,action_sequence):
+    def visualize_control(self,action_sequence,start_idx=0):
         # update robot state and make animation when executing action sequence
         actions = []
 
         # counter for updating distributions plot
-        self.dist_step = 0
+        self.step = start_idx
         
         for i,a in enumerate(action_sequence):
             for _ in range(self.env.robot.N):
                 action = {}
                 action["action"] = a
-                if self.draw_dist:
-                    action["cvars"] = [self.episode_actions_cvars[i]]
-                    action["quantiles"] = [self.episode_actions_quantiles[i][0]]
-                    action["taus"] = [self.episode_actions_taus[i]]
+                if self.video_plots:
+                    if self.plot_dist:
+                        action["cvars"] = self.episode_actions_cvars[i]
+                        action["quantiles"] = self.episode_actions_quantiles[i]
+                        action["taus"] = self.episode_actions_taus[i]
+                    elif self.plot_qvalues:
+                        action["qvalues"] = self.episode_actions_values[i]
+                
                 actions.append(action)
 
-        self.animation = animation.FuncAnimation(self.fig, self.one_step,frames=actions, \
-                                                 init_func=self.init_animation,
-                                                 interval=10,repeat=False)
-        plt.show()
+        if self.video_plots:
+            for i,action in enumerate(actions):
+                self.one_step(action)
+                self.fig.savefig(f"{self.plots_save_dir}/step_{self.step}.png",pad_inches=0.2,dpi=self.dpi)
+        else:
+            self.animation = animation.FuncAnimation(self.fig, self.one_step,frames=actions, \
+                                                    init_func=self.init_animation,
+                                                    interval=10,repeat=False)
+            plt.show()
 
     def load_episode(self,episode_dict):
         episode = copy.deepcopy(episode_dict)
@@ -449,11 +579,14 @@ class EnvVisualizer:
                                                     high = np.inf * np.ones(obs_len), \
                                                     dtype = np.float32)
 
-        if self.draw_dist:
+        if self.plot_dist:
             # load action cvars, quantiles and taus
             self.episode_actions_cvars = episode["robot"]["actions_cvars"]
             self.episode_actions_quantiles = episode["robot"]["actions_quantiles"]
             self.episode_actions_taus = episode["robot"]["actions_taus"]
+        elif self.plot_qvalues:
+            # load action values
+            self.episode_actions_values = episode["robot"]["actions_values"]
 
     def load_episode_from_eval_files(self,config_f,eval_f,eval_id,env_id):
         with open(config_f,"r") as f:
@@ -468,7 +601,7 @@ class EnvVisualizer:
             episode = json.load(f)
         self.load_episode(episode)
 
-    def play_episode(self):
+    def play_episode(self,start_idx=0):
         self.robot_last_pos = None
         for plot in self.robot_traj_plot:
             plot[0].remove()
@@ -479,13 +612,14 @@ class EnvVisualizer:
 
         self.init_visualize()
 
-        self.visualize_control(self.episode_actions)
+        self.visualize_control(self.episode_actions,start_idx)
 
     def draw_trajectory(self,
                         only_ep_actions:bool=True, # only draw the resulting trajectory of actions in episode data 
                         all_actions:dict=None, # otherwise, draw all trajectories from given action sequences
                         fork_state_info:dict=None # if fork state is given, plot action distributions 
                         ):
+        # Used in Mode 3
         for plot in self.robot_traj_plot:
             plot[0].remove()
         self.robot_traj_plot.clear()
@@ -520,8 +654,8 @@ class EnvVisualizer:
                         traj = np.concatenate((traj,curr))
             trajs.append(traj)
 
-        colors = ['tab:orange','lime',"r"]
-        styles = ['solid','dashed','dashdot']
+        colors = ['tab:orange','lime','r','b']
+        styles = ['solid','dashed','dashdot','dashdot']
 
         for i, l in enumerate(all_actions.keys()):
             traj = trajs[i]
@@ -532,4 +666,14 @@ class EnvVisualizer:
         self.axis_graph.legend(loc='upper left',bbox_to_anchor=(0.18,0.95))
         self.axis_graph.set_xticks([])
         self.axis_graph.set_yticks([])
-        
+
+        self.fig.savefig(f"trajectory_test.png",bbox_inches="tight",dpi=self.dpi)
+
+    def draw_video_plots(self,episode,save_dir,start_idx,agent):
+        # Used in Mode 4
+        self.agent = agent
+        self.load_episode(episode)
+        self.plots_save_dir = save_dir
+        self.play_episode(start_idx)
+        return self.step
+
