@@ -93,11 +93,11 @@ class MarineNavEnv(gym.Env):
             self.num_obs = self.schedule["num_obstacles"][idx]
             self.min_start_goal_dis = self.schedule["min_start_goal_dis"][idx]
 
-            print("======== training env setup ========")
+            print("======== training schedule ========")
             print("num of cores: ",self.num_cores)
             print("num of obstacles: ",self.num_obs)
             print("min start goal dis: ",self.min_start_goal_dis)
-            print("======== training env setup ========\n") 
+            print("======== training schedule ========\n") 
         
         self.episode_timesteps = 0
 
