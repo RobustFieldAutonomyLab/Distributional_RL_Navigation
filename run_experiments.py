@@ -1,7 +1,5 @@
 import sys
 sys.path.insert(0,"./thirdparty")
-from stable_baselines3 import PPO
-from stable_baselines3 import A2C
 from stable_baselines3 import DQN
 from thirdparty import QRDQN
 from thirdparty import IQNAgent
@@ -124,96 +122,6 @@ def evaluation_classical(first_observation, agent, test_env):
     time = test_env.robot.dt * test_env.robot.N * length
 
     return test_env.episode_data(), success, time, energy, out_of_area, computation_times
-
-def exp_setup_1(envs):
-    # keep default env settings
-    pass
-
-def exp_setup_2(envs):
-    # fix the obstacle r = 0.5, and increases num to 10
-    for env in envs:
-        env.obs_r_range = [1,1]
-        env.num_obs = 10
-
-def exp_setup_3(envs,n_obs,n_cores):
-    # 1. fix the obstacle r = 0.5, and increases num to 8
-    # 2. reduce the area of obstacle generation to make them more dense
-    # 3. fix the start and goal position so that obstacles lie in the line between them
-    observations = []
-    for env in envs:
-        env.obs_r_range = [1,1]
-        env.num_obs = n_obs
-        env.num_cores = n_cores
-        env.start = np.array([6.0,6.0])
-        env.goal = np.array([44.0,44.0])
-
-        # reset the environment
-        env.cores.clear()
-        env.obstacles.clear()
-
-        num_cores = env.num_cores
-        num_obs = env.num_obs
-
-        # generate vortex with random position, spinning direction and strength
-        if num_cores > 0:
-            iteration = 500
-            while True:
-                center = env.rd.uniform(low = np.zeros(2), high = np.array([env.width,env.height]))
-                direction = env.rd.binomial(1,0.5)
-                v_edge = env.rd.uniform(low = env.v_range[0], high = env.v_range[1])
-                Gamma = 2 * np.pi * env.r * v_edge
-                core = marinenav_env.Core(center[0],center[1],direction,Gamma)
-                iteration -= 1
-                if env.check_core(core):
-                    env.cores.append(core)
-                    num_cores -= 1
-                if iteration == 0 or num_cores == 0:
-                    break
-        
-        centers = None
-        for core in env.cores:
-            if centers is None:
-                centers = np.array([[core.x,core.y]])
-            else:
-                c = np.array([[core.x,core.y]])
-                centers = np.vstack((centers,c))
-        
-        # KDTree storing vortex core center positions
-        if centers is not None:
-            env.core_centers = scipy.spatial.KDTree(centers)
-
-        # generate obstacles with random position and size
-        if num_obs > 0:
-            iteration = 500
-            while True:
-                center = env.rd.uniform(low = 10*np.ones(2), high = 40*np.ones(2))
-                r = env.rd.uniform(low = env.obs_r_range[0], high = env.obs_r_range[1])
-                obs = marinenav_env.Obstacle(center[0],center[1],r)
-                iteration -= 1
-                if env.check_obstacle(obs):
-                    env.obstacles.append(obs)
-                    num_obs -= 1
-                if iteration == 0 or num_obs == 0:
-                    break
-
-        centers = None
-        for obs in env.obstacles:
-            if centers is None:
-                centers = np.array([[obs.x,obs.y]])
-            else:
-                c = np.array([[obs.x,obs.y]])
-                centers = np.vstack((centers,c))
-        
-        # KDTree storing obstacle center positions
-        if centers is not None: 
-            env.obs_centers = scipy.spatial.KDTree(centers)
-
-        # reset robot state
-        env.reset_robot()
-
-        observations.append(env.get_observation())
-
-    return observations
 
 def demonstration(envs):
     # Demonstrate that RL agents are clearly better in adverse flow field
