@@ -287,7 +287,7 @@ if __name__ == "__main__":
     ##### adaptive IQN #####
     test_env_0 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "pretrained_models/IQN/seed_3"
 
     # device = "cuda:0"
     device = "cpu"
@@ -303,7 +303,7 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.25 #####
     test_env_1 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "pretrained_models/IQN/seed_3"
 
     # device = "cuda:0"
     device = "cpu"
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.5 #####
     test_env_2 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "pretrained_models/IQN/seed_3"
 
     # device = "cuda:0"
     device = "cpu"
@@ -335,7 +335,7 @@ if __name__ == "__main__":
     ##### IQN cvar = 0.75 #####
     test_env_3 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "pretrained_models/IQN/seed_3"
 
     # device = "cuda:0"
     device = "cpu"
@@ -351,7 +351,7 @@ if __name__ == "__main__":
     ##### IQN cvar = 1.0 (greedy) #####
     test_env_4 = marinenav_env.MarineNavEnv(seed)
 
-    save_dir = "training_data/training_2023-02-08-00-06-53/seed_3"
+    save_dir = "pretrained_models/IQN/seed_3"
 
     # device = "cuda:0"
     device = "cpu"
@@ -367,7 +367,7 @@ if __name__ == "__main__":
     ##### DQN #####
     test_env_5 = marinenav_env.MarineNavEnv(seed)
     
-    save_dir = "training_data/training_2023-02-08-00-13-06/seed_3"
+    save_dir = "pretrained_models/DQN/seed_3"
     model_file = "latest_model.zip"
 
     # device = "cuda:0"

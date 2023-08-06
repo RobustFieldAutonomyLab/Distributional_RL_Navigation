@@ -1,5 +1,7 @@
-training*
-experiment*
+training_data/
+experiment_data/
 __pycache__
 marine_env/marine_env.egg-info/
-config/
+config_local/
+script_local/
+.VSCodeCounter

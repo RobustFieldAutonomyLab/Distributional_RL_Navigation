@@ -113,20 +113,6 @@ def run_trial(device,params):
                seed=params["seed"]+100,
                gamma=train_env.discount,
                device=device)
-    
-    # policy_args = {"n_quantiles":8}
-    # model = QRDQN(policy='MlpPolicy',
-    #               env=train_env,
-    #               learning_starts=10000,
-    #               policy_kwargs=policy_args,
-    #               train_freq=1,
-    #               exploration_fraction=0.1,
-    #               exploration_initial_eps=1.0,
-    #               exploration_final_eps=0.05,
-    #               verbose=1,
-    #               seed=1,
-    #               gamma=train_env.discount,
-    #               device=device)
 
     model.learn(total_timesteps=params["total_timesteps"],
                 eval_env=evaluate_env,

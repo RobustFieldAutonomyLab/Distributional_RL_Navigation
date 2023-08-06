@@ -1,0 +1,1 @@
+{"agent": "IQN", "seed": 3, "total_timesteps": 3000000, "eval_freq": 10000, "save_dir": "/home/rfal/Distributional_RL_Navigation/training_data", "training_time": "2023-02-09-21-54-05"}

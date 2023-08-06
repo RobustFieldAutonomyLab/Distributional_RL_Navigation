@@ -1,0 +1,7 @@
+{
+    "agent":"DQN",
+    "seed":[0,1,2,3,4],
+    "total_timesteps":3000000,
+    "eval_freq":10000,
+    "save_dir":"/home/rfal/Distributional_RL_Navigation/training_data"
+}
