@@ -1,7 +1,7 @@
 # Distributional RL for Navigation
 
 This repository provides the codes of our IROS 2023 paper [here](https://arxiv.org/abs/2307.16240). We developed a simulation environment for studying decision making problem in sensor-based Unmanned Surface Vehicle (USV) navigation scenarios (amidst unknown currents and obstacles), and proposed a Distribution RL based path planner that shows superior performance
-in safety, time and energy consumption vs. traditional RL and classical reactive planning algorithm.
+in safety, time and energy consumption vs. traditional RL and classical reactive planning algorithm. The performance of our approach is visualized in the video [here](https://robustfieldautonomylab.github.io/Lin_IROS_2023_video.mp4).
 
 <p align="center">
 <img width="1000" height="340" src="cvar_distributions.png"> 
