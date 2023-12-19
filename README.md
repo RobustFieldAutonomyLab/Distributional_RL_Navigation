@@ -1,11 +1,23 @@
 # Distributional RL for Navigation
 
-This repository provides the codes of our IROS 2023 paper [here](https://arxiv.org/abs/2307.16240). We developed a simulation environment for studying decision making problem in sensor-based Unmanned Surface Vehicle (USV) navigation scenarios (amidst unknown currents and obstacles), and proposed a Distribution RL based path planner that shows superior performance
-in safety, time and energy consumption vs. traditional RL and classical reactive planning algorithm. The performance of our approach is visualized in the video [here](https://robustfieldautonomylab.github.io/Lin_IROS_2023_video.mp4).
+This repository provides the codes of our IROS 2023 paper [here](https://ieeexplore.ieee.org/document/10342389). We developed a simulation environment for studying decision making problem in sensor-based Unmanned Surface Vehicle (USV) navigation scenarios (amidst unknown currents and obstacles), and proposed a Distribution RL based path planner that shows superior performance in safety, time and energy consumption vs. traditional RL and classical reactive planning algorithm. The performance of our approach is visualized in the video [here](https://robustfieldautonomylab.github.io/Lin_IROS_2023_video.mp4).
 
 <p align="center">
 <img width="1000" height="340" src="cvar_distributions.png"> 
 </p>
+
+Please cite as:
+```
+@INPROCEEDINGS{10342389,
+  author={Lin, Xi and McConnell, John and Englot, Brendan},
+  booktitle={2023 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)}, 
+  title={Robust Unmanned Surface Vehicle Navigation with Distributional Reinforcement Learning}, 
+  year={2023},
+  volume={},
+  number={},
+  pages={6185-6191},
+  doi={10.1109/IROS55552.2023.10342389}}
+```
 
 ## Train RL Agents
 
