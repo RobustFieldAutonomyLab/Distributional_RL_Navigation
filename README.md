@@ -6,7 +6,7 @@ This repository provides the codes of our IROS 2023 paper [here](https://arxiv.o
 <img width="1000" height="340" src="cvar_distributions.png"> 
 </p>
 
-Please cite as:
+If you find this repository useful, please cite our paper
 ```
 @INPROCEEDINGS{10342389,
   author={Lin, Xi and McConnell, John and Englot, Brendan},
