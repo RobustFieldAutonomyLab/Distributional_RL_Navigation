@@ -25,10 +25,9 @@ class Obstacle:
 class MarineNavEnv(gym.Env):
 
     def __init__(self, seed:int=0, schedule:dict=None):
-
+        
+        self.seed(seed)
         self.robot = robot.Robot()
-        self.sd = seed
-        self.rd = np.random.RandomState(seed) # PRNG 
 
         # Define action space and observation space for gym
         self.action_space = gym.spaces.Discrete(self.robot.compute_actions_dimension())
@@ -72,6 +71,11 @@ class MarineNavEnv(gym.Env):
         self.total_timesteps = 0 # learning timesteps
 
         self.set_boundary = False # set boundary of environment
+
+    def seed(self, seed):
+        self.sd = seed
+        self.rd = np.random.RandomState(seed) # PRNG
+        return [seed] 
 
     def get_state_space_dimension(self):
         return 2 + 2 + 2 * self.robot.sonar.num_beams
